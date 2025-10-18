@@ -1,0 +1,579 @@
+
+
+
+
+import React, { useState, useEffect, useRef, type FC } from 'react';
+import { Loader } from "@googlemaps/js-api-loader";
+
+// --- Google Maps Type Declarations ---
+// This is necessary because the script is loaded dynamically and TypeScript
+// isn't aware of the `google` global object otherwise.
+declare global {
+    interface Window {
+        google: typeof google;
+    }
+}
+
+declare namespace google.maps {
+    class Map {
+        constructor(mapDiv: Element, opts?: any);
+        setCenter(latLng: LatLng | any): void;
+        setZoom(zoom: number): void;
+        getCenter(): LatLng;
+        fitBounds(bounds: LatLngBounds | any): void;
+    }
+    class Marker {
+        constructor(opts?: any);
+        setMap(map: Map | null): void;
+        addListener(eventName: string, handler: Function): MapsEventListener;
+    }
+    interface MapsEventListener {
+        remove(): void;
+    }
+    class InfoWindow {
+        constructor(opts?: any);
+        setContent(content: string | Element): void;
+        open(map: Map | any, anchor?: any): void;
+        close(): void;
+        addListener(eventName: string, handler: Function): MapsEventListener;
+    }
+    class LatLng {
+        constructor(lat: number, lng: number);
+    }
+    class LatLngBounds {
+        constructor(sw?: LatLng, ne?: LatLng);
+        extend(point: LatLng | any): void;
+    }
+    enum Animation {
+        DROP,
+    }
+    namespace places {
+        class PlacesService {
+            constructor(attrContainer: HTMLDivElement | Map);
+            textSearch(request: TextSearchRequest, callback: (results: PlaceResult[] | null, status: PlacesServiceStatus) => void): void;
+        }
+        class Autocomplete {
+            constructor(inputField: HTMLInputElement, opts?: any);
+            getPlace(): PlaceResult;
+            addListener(eventName: string, handler: Function): MapsEventListener;
+        }
+        interface TextSearchRequest {
+            location?: LatLng;
+            radius?: number;
+            query: string;
+        }
+        enum PlacesServiceStatus {
+            OK = "OK",
+        }
+        interface PlaceResult {
+            geometry?: { location: LatLng };
+            name?: string;
+            formatted_address?: string;
+            website?: string;
+            place_id?: string;
+        }
+    }
+}
+
+// --- Component Props ---
+interface MapViewProps {
+    onStartAudit: (business: { name: string; website?: string }) => void;
+}
+
+// --- Constants ---
+// Using the API key from the firebase config.
+const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+// Default businesses to always show on the map
+const DEFAULT_BUSINESSES = [
+    {
+        name: "Starbucks",
+        position: { lat: 34.0522, lng: -118.2437 },
+        website: "https://www.starbucks.com",
+        address: "Los Angeles, CA"
+    },
+    {
+        name: "McDonald's",
+        position: { lat: 34.0505, lng: -118.2551 },
+        website: "https://www.mcdonalds.com",
+        address: "Los Angeles, CA"
+    },
+    {
+        name: "Target",
+        position: { lat: 34.0469, lng: -118.2509 },
+        website: "https://www.target.com",
+        address: "Los Angeles, CA"
+    }
+];
+
+
+// --- Helper Components ---
+
+const MapLoaderFC: FC = () => (
+    <div className="map-loader">
+        <div className="loading-spinner"></div>
+    </div>
+);
+
+const MapError: FC<{ message: string }> = ({ message }) => (
+    <div className="map-error-overlay">
+        <p>{message}</p>
+    </div>
+);
+
+// --- Main Map View Component ---
+
+export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
+    const [isApiReady, setIsApiReady] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true); // Start with loading true
+    const [searchHistory, setSearchHistory] = useState<string[]>([]);
+    const [isHistoryVisible, setHistoryVisible] = useState(false);
+    const [locationPermission, setLocationPermission] = useState<'pending'|'granted'|'denied'>('pending');
+    
+    const mapRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const mapInstance = useRef<google.maps.Map | null>(null);
+    const placesService = useRef<google.maps.places.PlacesService | null>(null);
+    const infoWindow = useRef<google.maps.InfoWindow | null>(null);
+    const markers = useRef<google.maps.Marker[]>([]);
+    const selectedMarker = useRef<google.maps.Marker | null>(null);
+    
+    const HISTORY_KEY = 'smartlocal-map-search-history';
+    const MAX_HISTORY_ITEMS = 10;
+
+    // Explicit user-gesture location request
+    const requestLocation = () => {
+        if (!navigator.geolocation) {
+            setLocationPermission('denied');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setLocationPermission('granted');
+                // If map is already initialized, recenter
+                if (isApiReady && mapInstance.current && window.google) {
+                    const { latitude, longitude } = position.coords;
+                    // @ts-ignore: LatLng type from global google
+                    const center = new window.google.maps.LatLng(latitude, longitude);
+                    mapInstance.current.setCenter(center);
+                    mapInstance.current.setZoom(12);
+                    // Drop/update selected marker at current location
+                    try {
+                        if (selectedMarker.current) selectedMarker.current.setMap(null);
+                        selectedMarker.current = new window.google.maps.Marker({
+                            map: mapInstance.current,
+                            position: center,
+                            title: 'Your location',
+                            icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                            animation: window.google.maps.Animation.DROP,
+                            draggable: true,
+                        });
+                        // When user fine-tunes by dragging, reload nearby businesses
+                        selectedMarker.current.addListener('dragend', (ev: any) => {
+                            const newLoc = ev?.latLng || center;
+                            mapInstance.current!.setCenter(newLoc);
+                            // @ts-ignore center override accepted by our helper
+                            showBusinessesInBounds && showBusinessesInBounds(newLoc);
+                        });
+                    } catch {}
+                    // Trigger nearby search (idle handler will also fire)
+                    // @ts-ignore center override accepted by our helper
+                    showBusinessesInBounds && showBusinessesInBounds(center);
+                }
+            },
+            () => setLocationPermission('denied')
+        );
+    };
+
+    useEffect(() => {
+        try {
+            const storedHistory = localStorage.getItem(HISTORY_KEY);
+            if (storedHistory) {
+                setSearchHistory(JSON.parse(storedHistory));
+            }
+        } catch (e) {
+            console.error("Failed to parse search history from localStorage", e);
+        }
+    }, []);
+
+
+    useEffect(() => {
+        if (isApiReady) return;
+        // Ask for location permission first
+        if (locationPermission === 'pending') {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    () => setLocationPermission('granted'),
+                    () => setLocationPermission('denied')
+                );
+            } else {
+                setLocationPermission('denied');
+            }
+            return;
+        }
+        // Now load the map
+        const loader = new Loader({
+            apiKey: MAPS_API_KEY,
+            version: "weekly",
+            libraries: ["places", "marker"],
+        });
+        loader.load()
+            .then(google => {
+                setIsApiReady(true);
+                if (locationPermission === 'granted' && navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            initMap(google, position.coords.latitude, position.coords.longitude);
+                        },
+                        () => {
+                            initMap(google);
+                        }
+                    );
+                } else {
+                    initMap(google);
+                }
+            })
+            .catch(e => {
+                console.error("Failed to load Google Maps script:", e);
+                setError("Failed to load Google Maps. Please check that the API key is correct and has the 'Maps JavaScript API' and 'Places API' enabled.");
+            })
+            .finally(() => {
+                 setLoading(false);
+            });
+    }, [isApiReady, locationPermission]);
+
+    const updateSearchHistory = (query: string) => {
+        if (!query || !query.trim()) return;
+        const trimmedQuery = query.trim();
+
+        const newHistory = [
+            trimmedQuery,
+            ...searchHistory.filter(item => item.toLowerCase() !== trimmedQuery.toLowerCase())
+        ].slice(0, MAX_HISTORY_ITEMS);
+
+        setSearchHistory(newHistory);
+        
+        try {
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+        } catch (e) {
+            console.error("Failed to save search history to localStorage", e);
+        }
+    };
+
+
+    const initMap = (google: typeof window.google, lat?: number, lng?: number) => {
+        if (!mapRef.current || !searchInputRef.current) return;
+
+        const center = lat && lng ? { lat, lng } : { lat: 34.0522, lng: -118.2437 };
+        mapInstance.current = new google.maps.Map(mapRef.current, {
+            center,
+            zoom: 12,
+            mapId: 'SMART_LOCAL_AI_MAP',
+        });
+        placesService.current = new google.maps.places.PlacesService(mapInstance.current);
+        infoWindow.current = new google.maps.InfoWindow();
+
+
+        // Show all businesses in the current map bounds on map load
+        showBusinessesInBounds();
+
+
+        // Debounce idle event to avoid excessive API calls
+        let idleTimeout: NodeJS.Timeout | null = null;
+        // @ts-ignore
+        window.google.maps.event.addListener(mapInstance.current, 'idle', () => {
+            if (idleTimeout) clearTimeout(idleTimeout);
+            idleTimeout = setTimeout(() => {
+                showBusinessesInBounds();
+            }, 500); // 500ms debounce
+        });
+
+        function showBusinessesInBounds(centerOverride?: any) {
+            if (!mapInstance.current || !placesService.current) return;
+            setLoading(true);
+            // Clear old markers before adding new ones
+            markers.current.forEach(marker => marker.setMap(null));
+            markers.current = [];
+            const center = centerOverride || mapInstance.current.getCenter();
+            // Use a smaller search radius for performance
+            const request = {
+                location: center,
+                radius: 1000, // meters
+                query: 'business',
+            };
+            placesService.current.textSearch(request, (results, status) => {
+                setLoading(false);
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+                    createMarkers(results);
+                } else {
+                    console.warn("Places search failed with status:", status);
+                }
+            });
+        }
+
+        const autocomplete = new google.maps.places.Autocomplete(searchInputRef.current, {
+             fields: ["geometry", "name"],
+        });
+        
+        autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            const query = searchInputRef.current?.value || place.name || "";
+            if (place.geometry && place.geometry.location) {
+                mapInstance.current?.setCenter(place.geometry.location);
+                mapInstance.current?.setZoom(14);
+            }
+            performSearch({ query });
+        });
+
+        // Allow the user to CLICK on map to "pick" a location
+        // @ts-ignore: event typings are simplified here
+        window.google.maps.event.addListener(mapInstance.current, 'click', (e: any) => {
+            const loc = e?.latLng;
+            if (!loc) return;
+            // Center/zoom the map to the clicked location
+            mapInstance.current!.setCenter(loc);
+            mapInstance.current!.setZoom(14);
+            // Drop or move a selected marker
+            if (selectedMarker.current) {
+                selectedMarker.current.setMap(null);
+            }
+            selectedMarker.current = new window.google.maps.Marker({
+                map: mapInstance.current!,
+                position: loc,
+                title: 'Selected location',
+                icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                animation: window.google.maps.Animation.DROP,
+                draggable: true,
+            });
+            // When user fine-tunes by dragging, reload nearby businesses
+            selectedMarker.current.addListener('dragend', (ev: any) => {
+                const newLoc = ev?.latLng || loc;
+                mapInstance.current!.setCenter(newLoc);
+                // @ts-ignore center override accepted by our helper
+                showBusinessesInBounds(newLoc);
+            });
+            // Load nearby businesses around the chosen point
+            showBusinessesInBounds(loc);
+        });
+
+        infoWindow.current.addListener('domready', () => {
+            const container = document.querySelector('.map-infowindow-content');
+            if (!container || container.classList.contains('click-handler-attached')) {
+                return;
+            }
+
+            container.classList.add('click-handler-attached');
+            container.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+
+                const auditButton = target.closest('.btn-start-audit');
+                if (auditButton) {
+                    const name = auditButton.getAttribute('data-name');
+                    const website = auditButton.getAttribute('data-website');
+                    if (name) {
+                        onStartAudit({ 
+                            name: decodeURIComponent(name), 
+                            website: website ? decodeURIComponent(website) : undefined 
+                        });
+                        infoWindow.current?.close();
+                    }
+                    return;
+                }
+            });
+        });
+    };
+
+    // Helper to show default business markers
+    const createDefaultMarkers = (google: typeof window.google) => {
+        markers.current.forEach(marker => marker.setMap(null));
+        markers.current = [];
+        const bounds = new google.maps.LatLngBounds();
+        DEFAULT_BUSINESSES.forEach(biz => {
+            const marker = new google.maps.Marker({
+                map: mapInstance.current,
+                position: biz.position,
+                title: biz.name,
+                animation: google.maps.Animation.DROP,
+                icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+            });
+            marker.addListener('click', () => {
+                if (!infoWindow.current) return;
+                const encodedName = encodeURIComponent(biz.name);
+                const encodedWebsite = encodeURIComponent(biz.website || "");
+                const content = `
+                    <div class="map-infowindow-content">
+                        <h4>${biz.name}</h4>
+                        <p>${biz.address || ''}</p>
+                        <div class="map-infowindow-buttons" style="margin-top: 1rem;">
+                            <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodedWebsite}">Start an audit</button>
+                        </div>
+                    </div>
+                `;
+                infoWindow.current.setContent(content);
+                infoWindow.current.open(mapInstance.current, marker);
+            });
+            markers.current.push(marker);
+            bounds.extend(biz.position);
+        });
+        if (mapInstance.current && markers.current.length > 0) {
+            mapInstance.current.fitBounds(bounds);
+        }
+    };
+    
+    const performSearch = (request: google.maps.places.TextSearchRequest) => {
+        if (!placesService.current || !request.query.trim()) return;
+        
+        updateSearchHistory(request.query);
+        setHistoryVisible(false);
+        if (searchInputRef.current) {
+            searchInputRef.current.blur(); // Dismiss keyboard on mobile
+        }
+
+        if (!request.location) {
+            request.location = mapInstance.current!.getCenter()!;
+        }
+        
+        setLoading(true);
+        placesService.current.textSearch(request, (results, status) => {
+             setLoading(false);
+            if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                createMarkers(results);
+            } else {
+                console.warn("Places search failed with status:", status);
+            }
+        });
+    };
+
+    const handleHistoryClick = (query: string) => {
+        if (searchInputRef.current) {
+            searchInputRef.current.value = query;
+            performSearch({ query });
+        }
+    };
+    
+    const createMarkers = (places: google.maps.places.PlaceResult[]) => {
+        markers.current.forEach(marker => marker.setMap(null));
+        markers.current = [];
+        
+        const bounds = new google.maps.LatLngBounds();
+
+        places.forEach(place => {
+            if (!place.geometry || !place.geometry.location || !place.name) return;
+
+            const marker = new google.maps.Marker({
+                map: mapInstance.current,
+                position: place.geometry.location,
+                title: place.name,
+                animation: google.maps.Animation.DROP,
+                icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+            });
+            
+            marker.addListener('click', () => {
+                if (!infoWindow.current) return;
+                
+                const website = place.website ?? '';
+                const encodedName = encodeURIComponent(place.name!);
+                const encodedWebsite = encodeURIComponent(website);
+
+                const content = `
+                    <div class="map-infowindow-content">
+                        <h4>${place.name}</h4>
+                        <p>${place.formatted_address || ''}</p>
+                        <div class="map-infowindow-buttons" style="margin-top: 1rem;">
+                            <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodedWebsite}">Start an audit</button>
+                        </div>
+                    </div>
+                `;
+                infoWindow.current.setContent(content);
+                infoWindow.current.open(mapInstance.current, marker);
+            });
+            
+            markers.current.push(marker);
+            bounds.extend(place.geometry.location);
+        });
+        
+        if (mapInstance.current && markers.current.length > 0) {
+           mapInstance.current.fitBounds(bounds);
+        }
+    };
+
+    if (locationPermission === 'pending') {
+        return (
+            <div className="map-view-wrapper">
+                <MapLoaderFC />
+                <div className="map-permission-message">
+                    Please allow location access to show local businesses on the map.
+                    <div style={{ marginTop: '0.75rem' }}>
+                        <button className="btn btn-primary" onClick={requestLocation}>Enable my location</button>
+                    </div>
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
+                        Tip: Use http://localhost (not the Network URL) so browsers allow geolocation on insecure origins.
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    if (locationPermission === 'denied') {
+        return (
+            <div className="map-view-wrapper">
+                <MapError message="Location access denied. Showing default area. You can try again or enable location in your browser settings." />
+                <div style={{ margin: '0.75rem 0' }}>
+                    <button className="btn" onClick={requestLocation}>Try again</button>
+                </div>
+                <div ref={mapRef} className="map-container"></div>
+            </div>
+        );
+    }
+    return (
+        <div className="map-view-wrapper">
+            {error && <MapError message={error} />}
+            {loading && <MapLoaderFC />}
+            <div className="map-search-container">
+                <input
+                    ref={searchInputRef}
+                    type="text"
+                    className="map-search-input"
+                    placeholder="Search for a business or location"
+                    disabled={!isApiReady}
+                    onFocus={() => setHistoryVisible(true)}
+                    onBlur={() => {
+                        // Delay hiding to allow clicks on history items
+                        setTimeout(() => setHistoryVisible(false), 200);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && searchInputRef.current) {
+                            performSearch({ query: searchInputRef.current.value });
+                        }
+                    }}
+                    autoComplete="off"
+                />
+                <button
+                    className="btn"
+                    style={{ marginLeft: '0.5rem' }}
+                    onClick={requestLocation}
+                    disabled={!isApiReady}
+                    aria-label="Use my location"
+                    title="Use my location"
+                >
+                    Use my location
+                </button>
+                {isHistoryVisible && searchHistory.length > 0 && (
+                    <div className="search-history-dropdown">
+                        {searchHistory.map((item, index) => (
+                            <div
+                                key={`${item}-${index}`}
+                                className="search-history-item"
+                                // Use onMouseDown to trigger before the input's onBlur
+                                onMouseDown={() => handleHistoryClick(item)}
+                            >
+                                {item}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <div ref={mapRef} className="map-container"></div>
+        </div>
+    );
+};

@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "smartlocalai-b092a",
+    "staging": "smartlocalai-b092a"
+  },
+  "targets": {},
+  "etags": {}
+}

@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: check if the current user is the consultant for a given client
+    function isConsultantOfClient(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId)).data.consultant_uid == request.auth.uid;
+    }
+
+    // Clients collection: each document owned by a consultant via consultant_uid
+    match /clients/{clientId} {
+      allow read: if isSignedIn() && resource.data.consultant_uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.consultant_uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.consultant_uid == request.auth.uid;
+    }
+
+    // Audits collection: tied to a client and/or consultant
+    match /audits/{auditId} {
+      allow read: if isSignedIn() && (
+        resource.data.consultant_uid == request.auth.uid ||
+        isConsultantOfClient(resource.data.client_id)
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.consultant_uid == request.auth.uid ||
+        isConsultantOfClient(request.resource.data.client_id)
+      );
+      allow update, delete: if isSignedIn() && (
+        resource.data.consultant_uid == request.auth.uid ||
+        isConsultantOfClient(resource.data.client_id)
+      );
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
