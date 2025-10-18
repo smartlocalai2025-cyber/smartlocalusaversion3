@@ -1,0 +1,36 @@
+{
+  "name": "smartlocal-ai",
+  "private": true,
+  "workspaces": [
+    "ai-server",
+    "functions",
+    "shared"
+  ],
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "npm --prefix ai-server start",
+    "start:server": "npm --prefix ai-server start",
+    "dev:all": "concurrently -k \"npm:dev\" \"npm:start:server\""
+  },
+  "dependencies": {
+    "@dataconnect/generated": "file:src/dataconnect-generated",
+    "@googlemaps/js-api-loader": "^1.16.6",
+    "express": "^4.19.2",
+    "firebase": "^10.12.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.13"
+  }
+}

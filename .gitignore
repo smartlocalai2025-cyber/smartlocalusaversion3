@@ -1,0 +1,22 @@
+node_modules
+
+# Environment files
+.env
+.env.*
+!/env.example
+ai-server/.env
+functions/.env
+
+# Firebase Admin SDK service account key
+smartlocalai-b092a-firebase-adminsdk-fbsvc-31922800a8.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist
+.next
+*.cache
