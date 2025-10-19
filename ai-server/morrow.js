@@ -564,6 +564,192 @@ class MorrowAI {
     ] }));
   }
 
+  /**
+   * Brain mode: let a real LLM (OpenAI, Claude, etc.) decide which tools to run
+   * The model orchestrates tool calls; MorrowAI executes safely and feeds results back
+   * @param {Object} params
+   * @param {string} params.prompt - User prompt
+   * @param {string} params.conversationId - Conversation ID for memory
+   * @param {string} params.provider - Provider name (openai, claude, gemini, ollama)
+   * @param {string} params.model - Model name (gpt-4o-mini, claude-3-5-sonnet, etc.)
+   * @param {Array<string>} params.toolsAllow - Optional tool allowlist
+   * @param {Object} params.limits - Optional limits {maxSteps, maxTimeMs}
+   * @returns {Promise<{final_text, tool_trace, steps_used, provider, model, conversationId}>}
+   */
+  async brain({ prompt, conversationId, provider = 'openai', model, toolsAllow, limits = {} }) {
+    const startTime = Date.now();
+    const convId = conversationId || `brain_${Date.now()}`;
+    const maxSteps = limits.maxSteps || 4;
+    const maxTimeMs = limits.maxTimeMs || 20000;
+
+    // Load provider adapter
+    let adapter;
+    try {
+      if (provider === 'openai') {
+        const { OpenAIAdapter } = require('./providers/openai');
+        adapter = new OpenAIAdapter({ apiKey: process.env.OPENAI_API_KEY });
+      } else {
+        throw new Error(`Unsupported provider: ${provider}. Only 'openai' is implemented currently.`);
+      }
+
+      if (!adapter.isConfigured()) {
+        throw new Error(`Provider ${provider} not configured: missing API key`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to load provider: ${error.message}`);
+    }
+
+    // Initialize tool registry
+    const { ToolRegistry } = require('./tools');
+    const registry = new ToolRegistry(this);
+    const toolDefinitions = registry.getToolDefinitions(toolsAllow);
+
+    // Build system message with persona and instructions
+    const systemMessage = {
+      role: 'system',
+      content: [
+        `You are ${this.persona.name}, ${this.persona.vibe}.`,
+        `Principles: ${this.persona.principles.join('; ')}.`,
+        `You have access to tools to help users with local business marketing, SEO, audits, and content.`,
+        `Use tools strategically to gather information before answering.`,
+        `When you have enough information, provide a clear, actionable final answer.`,
+        `Keep responses ${this.persona.style.defaultVerbosity}.`
+      ].join('\n')
+    };
+
+    // Initialize conversation with system + user prompt
+    const messages = [systemMessage];
+    
+    // Add recent context from memory if available
+    const contextSnippet = this._getContextSnippet(convId);
+    if (contextSnippet) {
+      messages.push({ role: 'system', content: contextSnippet });
+    }
+
+    messages.push({ role: 'user', content: prompt });
+
+    // Store for trace
+    const toolTrace = [];
+    let stepsUsed = 0;
+    let finalText = '';
+
+    // Tool-calling loop with guardrails
+    for (let step = 0; step < maxSteps; step++) {
+      // Check timeout
+      if (Date.now() - startTime > maxTimeMs) {
+        finalText = `⏱️ Reached time limit. Here's what I found so far:\n\n${finalText || 'Still gathering information...'}`;
+        break;
+      }
+
+      stepsUsed++;
+
+      try {
+        // Send to provider
+        const response = await adapter.sendMessage(messages, toolDefinitions, { model, temperature: 0.7 });
+
+        // Check if model wants to call tools
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          // Execute each tool call
+          for (const toolCall of response.toolCalls) {
+            const toolName = toolCall.name;
+            let toolArgs;
+            
+            try {
+              toolArgs = JSON.parse(toolCall.arguments);
+            } catch (e) {
+              toolArgs = {};
+            }
+
+            // Validate tool is allowed
+            if (!registry.isToolAllowed(toolName, toolsAllow)) {
+              throw new Error(`Tool ${toolName} not allowed`);
+            }
+
+            // Execute tool
+            let toolResult;
+            try {
+              toolResult = await registry.executeTool(toolName, toolArgs);
+              toolTrace.push({
+                step: stepsUsed,
+                tool: toolName,
+                input: toolArgs,
+                output: toolResult,
+                timestamp: Date.now(),
+                success: true
+              });
+            } catch (error) {
+              toolResult = { error: error.message };
+              toolTrace.push({
+                step: stepsUsed,
+                tool: toolName,
+                input: toolArgs,
+                output: toolResult,
+                timestamp: Date.now(),
+                success: false,
+                error: error.message
+              });
+            }
+
+            // Add tool call and result to conversation
+            messages.push({
+              role: 'assistant',
+              content: null,
+              tool_calls: [{
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: toolName,
+                  arguments: toolCall.arguments
+                }
+              }]
+            });
+
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolName,
+              content: JSON.stringify(toolResult)
+            });
+          }
+
+          // Continue loop to get next response
+          continue;
+        }
+
+        // No tool calls - this is the final answer
+        finalText = response.content || 'No response generated.';
+        
+        // Store in memory
+        this._pushMessage(convId, 'user', prompt);
+        this._pushMessage(convId, 'assistant', finalText);
+        
+        break;
+
+      } catch (error) {
+        throw new Error(`Brain loop error at step ${stepsUsed}: ${error.message}`);
+      }
+    }
+
+    // If we exhausted steps without a final answer
+    if (!finalText && stepsUsed >= maxSteps) {
+      finalText = `⚡ Reached step limit (${maxSteps}). Based on the tools I used, here's a summary:\n\n${toolTrace.map(t => `• ${t.tool}: ${t.success ? 'success' : 'failed'}`).join('\n')}`;
+    }
+
+    const duration = Date.now() - startTime;
+    this._updateStats(duration);
+
+    return {
+      final_text: finalText,
+      tool_trace: toolTrace,
+      steps_used: stepsUsed,
+      provider: adapter.getName(),
+      model: model || 'default',
+      conversationId: convId,
+      duration_ms: duration,
+      timestamp: new Date().toISOString()
+    };
+  }
+
   // Provider selection and knowledge helpers
   _chooseProvider() {
     // Basic strategy: pick highest reliability from preferredOrder.

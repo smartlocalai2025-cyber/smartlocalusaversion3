@@ -72,6 +72,12 @@ app.post('/api/ai/image', asyncHandler(async (req, res) => {
   res.json(out);
 }));
 
+// Brain mode: LLM-driven tool orchestration
+app.post('/api/ai/brain', asyncHandler(async (req, res) => {
+  const out = await morrow.brain(req.body || {});
+  res.json(out);
+}));
+
 // Advanced Features
 app.post('/api/features/seo-analysis', asyncHandler(async (req, res) => res.json(await morrow.seoAnalysis(req.body || {}))));
 app.post('/api/features/social-content', asyncHandler(async (req, res) => res.json(await morrow.socialContent(req.body || {}))));

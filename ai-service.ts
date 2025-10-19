@@ -384,6 +384,45 @@ class LocalAIService {
     return this.request('/api/ai/assistant', { prompt, context, conversationId }, options);
   }
 
+  /**
+   * Brain mode: Let a real LLM decide which tools to run
+   * The model orchestrates tool calls; MorrowAI executes safely and feeds results back
+   * @param prompt - User prompt
+   * @param conversationId - Optional conversation ID for memory
+   * @param provider - Provider to use (openai, claude, gemini, ollama) - default: openai
+   * @param model - Model name (e.g., gpt-4o-mini)
+   * @param toolsAllow - Optional array of allowed tool names
+   * @param limits - Optional limits { maxSteps, maxTimeMs }
+   * @returns Promise with final_text, tool_trace, steps_used, etc.
+   */
+  async brain(
+    prompt: string,
+    conversationId?: string,
+    provider: AIProviderName = 'openai',
+    model?: string,
+    toolsAllow?: string[],
+    limits?: { maxSteps?: number; maxTimeMs?: number }
+  ): Promise<{
+    final_text: string;
+    tool_trace: Array<any>;
+    steps_used: number;
+    provider: string;
+    model: string;
+    conversationId: string;
+    duration_ms: number;
+    timestamp: string;
+  }> {
+    const response = await this.request('/api/ai/brain', {
+      prompt,
+      conversationId,
+      provider,
+      model,
+      toolsAllow,
+      limits
+    });
+    return response as any;
+  }
+
   // Get available features
   async getFeatures(): Promise<any> {
     const response = await fetch(`${this.baseUrl}/api/features`);

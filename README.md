@@ -29,6 +29,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/13R4fDxC_pdM0tIOgMSQC9W
    VITE_DEFAULT_AI_MODEL=claude-3-sonnet-20240229
    VITE_REQUEST_TIMEOUT=30000
    VITE_MAX_RETRIES=2
+
+   # Optional - Brain Mode (OpenAI-driven tool orchestration)
+   OPENAI_API_KEY=your_openai_api_key
    ```
 
 3. Start development:
@@ -160,6 +163,66 @@ const social = await localAI.generateSocialContent({
   topic: 'AI news',
   platform: 'twitter'
 });
+
+// Brain mode: Let OpenAI orchestrate tool calls
+const brainResponse = await localAI.brain(
+  'Analyze the website https://example.com and create an audit',
+  undefined, // conversationId
+  'openai',  // provider
+  'gpt-4o-mini' // model
+);
+console.log(brainResponse.final_text); // AI's final answer
+console.log(brainResponse.tool_trace); // Tools used
+```
+
+## 🧠 Brain Mode
+
+Brain mode lets a real LLM (OpenAI, Claude, etc.) act as the orchestrator that decides which tools to run. MorrowAI exposes safe tools and executes them with guardrails.
+
+### How it works
+1. You send a prompt to `/api/ai/brain`
+2. The LLM decides which tools to call (search_knowledge, website_intel, leads_list, audit_start, report_generate)
+3. MorrowAI validates inputs, executes tools safely, and feeds results back
+4. The LLM iterates (up to `maxSteps`) until it produces a final answer
+5. You get: `final_text`, `tool_trace`, `steps_used`, `provider`, `model`
+
+### Available tools
+- `search_knowledge`: Search the knowledge base
+- `website_intel`: Fetch and analyze website content (public sites only)
+- `leads_list`: Get current leads/prospects
+- `audit_start`: Start a business audit
+- `report_generate`: Generate an audit report
+
+### Safety guardrails
+- **maxSteps**: Default 4 (configurable via `limits.maxSteps`)
+- **maxTime**: Default 20s (configurable via `limits.maxTimeMs`)
+- **Tool allowlist**: Optionally restrict which tools the LLM can call via `toolsAllow` parameter
+- **Input validation**: All tool arguments validated against JSON schemas
+- **SSRF protection**: Website fetching blocked for localhost/private IPs
+- **Auth**: Sensitive endpoints require Firebase auth + admin token
+
+### Configuration
+Set `OPENAI_API_KEY` in your `.env` or `.env.local` (backend only—never expose in frontend).
+
+### Example usage (frontend)
+```typescript
+const result = await localAI.brain(
+  'Find leads in the database and start an audit for the first one',
+  undefined,
+  'openai',
+  'gpt-4o-mini'
+);
+```
+
+### Example usage (API)
+```bash
+curl -X POST http://localhost:8080/api/ai/brain \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Search the knowledge base for SEO best practices",
+    "provider": "openai",
+    "model": "gpt-4o-mini"
+  }'
 ```
 
 ## 🤝 Contributing
