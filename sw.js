@@ -24,9 +24,18 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // We only want to handle GET requests
+    // Only handle GET requests
     if (event.request.method !== 'GET') {
       return;
+    }
+
+    const url = new URL(event.request.url);
+    const isSameOrigin = url.origin === self.location.origin;
+    const isMaps = /(^|\.)googleapis\.com$/.test(url.hostname) || /(^|\.)gstatic\.com$/.test(url.hostname) || url.pathname.includes('/maps/api/');
+
+    // Never intercept Google Maps or other third-party cross-origin requests
+    if (!isSameOrigin || isMaps) {
+      return; // Let the network handle it directly
     }
 
     // For navigation requests (loading the main page), use a network-first strategy
@@ -48,7 +57,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // For all other requests (assets like JS, CSS, images), use a stale-while-revalidate strategy
+  // For all other same-origin requests (assets like JS, CSS, images), use a stale-while-revalidate strategy
     event.respondWith(
         caches.open(CACHE_NAME).then(cache => {
             return cache.match(event.request).then(response => {

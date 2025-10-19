@@ -643,22 +643,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     };
 
     // Responsive and accessible rendering
-    if (locationPermission === 'pending') {
-        return (
-            <div className="map-view-wrapper" style={{ minHeight: 400 }}>
-                <MapLoaderFC />
-                <div className="map-permission-message" aria-live="polite">
-                    Please allow location access to show local businesses on the map.
-                    <div style={{ marginTop: '0.75rem' }}>
-                        <button className="btn btn-primary" onClick={requestLocation}>Enable my location</button>
-                    </div>
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
-                        Tip: Use http://localhost (not the Network URL) so browsers allow geolocation on insecure origins.
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    // Note: When permission is 'pending', we still render the map to avoid blocking UX.
+    // We show a non-blocking prompt instead of gating the whole view.
     if (locationPermission === 'denied') {
         return (
             <div className="map-view-wrapper" style={{ minHeight: 400 }}>
@@ -674,6 +660,25 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         <div className="map-view-wrapper" style={{ minHeight: 400 }}>
             {error && <MapError message={error} />}
             {loading && <MapLoaderFC />}
+            {locationPermission === 'pending' && (
+                <div className="map-permission-message" aria-live="polite" style={{
+                    position: 'absolute',
+                    top: 16,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 20,
+                    background: 'rgba(255,255,255,0.95)',
+                    borderRadius: 8,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    padding: '10px 16px'
+                }}>
+                    Please allow location access to show local businesses near you.
+                    <div style={{ marginTop: '0.5rem', display: 'flex', gap: 8 }}>
+                        <button className="btn btn-primary" onClick={requestLocation}>Enable my location</button>
+                        <button className="btn" onClick={() => setLocationPermission('denied')}>Skip</button>
+                    </div>
+                </div>
+            )}
             <div className="map-search-container" aria-live="polite">
                 <input
                     ref={searchInputRef}
