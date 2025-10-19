@@ -103,11 +103,15 @@ class MorrowAI {
     return { name: this.name, model: this.model, features: this.features };
   }
 
-  async _simulateWork(fn) {
+  async _simulateWork(fn, logKnowledge = null) {
     const start = Date.now();
     try {
       this.queue.push(start);
       const result = await fn();
+      // If logKnowledge is provided, log the call to knowledge store
+      if (logKnowledge) {
+        this._logKnowledgeCall(logKnowledge);
+      }
       return result;
     } finally {
       const duration = Date.now() - start;
@@ -121,26 +125,36 @@ class MorrowAI {
       const snippets = this._searchKnowledge(prompt, 3, 500);
       const knowledgeNote = snippets.length ? `\n\n[Knowledge]\n${snippets.map(s=>`- ${s.title}`).join('\n')}` : '';
       return {
-        response: `Morrow.AI here (provider: ${this.activeProvider}). You said: "${prompt}".${knowledgeNote}\nHow can I help further?`,
+        response: `Morrow.AI here (provider: ${this.activeProvider}). You said: \"${prompt}\".${knowledgeNote}\nHow can I help further?`,
         conversationId: conversationId || `conv_${Date.now()}`,
         provider: this.name,
         timestamp: new Date().toISOString(),
       };
-    });
+    }, { type: 'chat', prompt, conversationId });
   }
 
   async assistant({ prompt, context, conversationId }) {
-    return this.chat({ prompt: `${context ? `[Context:${context}] `: ''}${prompt}`, conversationId });
+    return this._simulateWork(async () => {
+      const fullPrompt = `${context ? `[Context:${context}] `: ''}${prompt}`;
+      const snippets = this._searchKnowledge(fullPrompt, 3, 500);
+      const knowledgeNote = snippets.length ? `\n\n[Knowledge]\n${snippets.map(s=>`- ${s.title}`).join('\n')}` : '';
+      return {
+        response: `Morrow.AI here (provider: ${this.activeProvider}). You said: \"${fullPrompt}\".${knowledgeNote}\nHow can I help further?`,
+        conversationId: conversationId || `conv_${Date.now()}`,
+        provider: this.name,
+        timestamp: new Date().toISOString(),
+      };
+    }, { type: 'assistant', prompt, context, conversationId });
   }
 
   async generate({ action, params }) {
     return this._simulateWork(async () => {
       return { text: `Generated (${action}) for ${params?.businessName || params?.topic || 'request'}` };
-    });
+    }, { type: 'generate', action, params });
   }
 
   async image({ prompt }) {
-    return this._simulateWork(async () => ({ images: [`https://placehold.co/1024x576?text=${encodeURIComponent(prompt || 'Morrow.AI')}`] }));
+    return this._simulateWork(async () => ({ images: [`https://placehold.co/1024x576?text=${encodeURIComponent(prompt || 'Morrow.AI')}`] }), { type: 'image', prompt });
   }
 
   async seoAnalysis({ businessName, website, location, industry }) {
@@ -148,36 +162,58 @@ class MorrowAI {
       analysis: `SEO Analysis for ${businessName}${website?` (${website})`:''}${location?` in ${location}`:''}${industry?` [${industry}]`:''}\n\n- GBP: Ensure categories, photos, reviews\n- On-Page: Titles, H1, NAP, internal links\n- Citations: Yelp, BBB, Apple Maps\n- Reviews: Implement request cadence\n- Competitors: Identify 2-3 and gaps\n- Actions: Top 5 quick wins`,
       provider: this.name,
       timestamp: new Date().toISOString(),
-    }));
+    }), { type: 'seoAnalysis', businessName, website, location, industry });
   }
 
   async socialContent({ businessName, topic, platform, tone, includeImage }) {
     const text = `Post for ${businessName} on ${platform || 'social'} (tone: ${tone || 'friendly'}): ${topic}. #${(businessName||'local').toLowerCase().replace(/\s+/g,'')}`;
     const images = includeImage ? [`https://placehold.co/800x600?text=${encodeURIComponent(topic)}`] : [];
-    return this._simulateWork(async () => ({ content: text, images, provider: this.name }));
+    return this._simulateWork(async () => ({ content: text, images, provider: this.name }), { type: 'socialContent', businessName, topic, platform, tone, includeImage });
   }
 
   async competitorAnalysis({ businessName, location, industry }) {
     const text = `Competitor analysis for ${businessName} in ${location}.\n- Likely competitors: 2-3 peers in ${industry || 'category'}\n- Strengths/Weaknesses\n- Opportunities & differentiators`;
-    return this._simulateWork(async () => ({ analysis: text, provider: this.name }));
+    return this._simulateWork(async () => ({ analysis: text, provider: this.name }), { type: 'competitorAnalysis', businessName, location, industry });
   }
 
   async contentCalendar({ businessName, industry, timeframe = '30', platforms = [] }) {
     const days = Number(timeframe) || 30;
     const text = `Content calendar for ${businessName} (${industry || 'general'}) over ${days} days on ${platforms.join(', ') || 'default platforms'}.`;
-    return this._simulateWork(async () => ({ calendar: text, provider: this.name }));
+    return this._simulateWork(async () => ({ calendar: text, provider: this.name }), { type: 'contentCalendar', businessName, industry, timeframe, platforms });
   }
 
   async startAudit({ businessName, website, scope = [] }) {
     return this._simulateWork(async () => ({
       report: `Started audit for ${businessName}${website?` (${website})`:''}. Scope: ${scope.join(', ') || 'standard local SEO'}.`,
       provider: this.name,
-    }));
+    }), { type: 'startAudit', businessName, website, scope });
   }
 
   async generateReport({ auditId, format = 'markdown' }) {
     const content = `# Audit Report\n\nID: ${auditId || 'N/A'}\n\nGenerated by ${this.name}.`;
-    return this._simulateWork(async () => ({ report: content, provider: this.name, format }));
+    return this._simulateWork(async () => ({ report: content, provider: this.name, format }), { type: 'generateReport', auditId, format });
+  }
+
+  // Log unique API calls to knowledge store
+  _logKnowledgeCall(call) {
+    if (!call || !this.knowledgeDir) return;
+    try {
+      const hash = this._hashCall(call);
+      const fname = `call_${hash}.json`;
+      const full = path.join(this.knowledgeDir, fname);
+      if (fs.existsSync(full)) return; // already logged
+      fs.writeFileSync(full, JSON.stringify({ ...call, timestamp: new Date().toISOString() }, null, 2), 'utf8');
+      this._loadKnowledge();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to log knowledge call:', e?.message || e);
+    }
+  }
+
+  _hashCall(call) {
+    // Simple hash: JSON.stringify, then base64 of first 12 chars
+    const str = JSON.stringify(call);
+    return Buffer.from(str).toString('base64').replace(/[^a-zA-Z0-9]/g,'').slice(0,12);
   }
 
   // Demo data endpoints used by the UI

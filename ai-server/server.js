@@ -1,3 +1,20 @@
+const ADMIN_TOKEN = process.env.MORROW_ADMIN_TOKEN || 'localdev';
+// Add knowledge file (admin only, basic)
+app.post('/api/knowledge/add', (req, res) => {
+  const token = req.headers['x-admin-token'] || req.query.token;
+  if (token !== ADMIN_TOKEN) return res.status(403).json({ ok: false, error: 'Forbidden' });
+  const { filename, content } = req.body || {};
+  if (!filename || !content) return res.status(400).json({ ok: false, error: 'Missing filename or content' });
+  try {
+    const safeName = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const fullPath = require('path').join(morrow.knowledgeDir, safeName);
+    require('fs').writeFileSync(fullPath, content, 'utf8');
+    morrow._loadKnowledge();
+    res.json({ ok: true, filename: safeName, count: morrow.getStats().knowledgeCount });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
 // Morrow.AI Express server for Cloud Run/Firebase
 const express = require('express');
 const { MorrowAI } = require('./morrow');
