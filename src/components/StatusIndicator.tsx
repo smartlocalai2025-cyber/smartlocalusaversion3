@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { localAI } from '../ai-service';
+import { localAI } from '../../ai-service';
 
 interface StatusIndicatorProps {
   className?: string;
