@@ -4,5 +4,6 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --production
 COPY server.js ./
+COPY morrow.js ./
 EXPOSE 8080
 CMD ["node", "server.js"]

@@ -161,6 +161,59 @@ const HealthBadge: FC = () => {
     );
 };
 
+// --- AI Status Panel ---
+const AIStatusPanel: FC = () => {
+    const [health, setHealth] = useState<'ok'|'down'>('down');
+    const [stats, setStats] = useState<any>({});
+    const [provider, setProvider] = useState(localAI.getProvider());
+    const [model, setModel] = useState(localAI.getModel());
+
+    const load = useCallback(async () => {
+        try {
+            const h = await fetch('/api/health');
+            setHealth(h.ok ? 'ok' : 'down');
+        } catch { setHealth('down'); }
+        try {
+            const s = await fetch('/api/stats');
+            if (s.ok) {
+                const data = await s.json();
+                setStats(data);
+                if (data?.provider) setProvider(data.provider);
+                if (data?.model) setModel(data.model);
+            }
+        } catch {}
+        try { setProvider(localAI.getProvider()); } catch {}
+        try { setModel(localAI.getModel()); } catch {}
+    }, []);
+
+    useEffect(() => {
+        load();
+        const t = setInterval(load, 20000);
+        return () => clearInterval(t);
+    }, [load]);
+
+    return (
+        <div className="card" style={{ padding: '1rem', display: 'grid', gap: 8 }}>
+            <h3>Morrow.AI Status</h3>
+            <div>Health: <strong style={{color: health==='ok'?'#28a745':'#dc3545'}}>{health==='ok'?'Online':'Offline'}</strong></div>
+            <div>Provider: {provider}</div>
+            <div>Model: {model}</div>
+            {typeof stats.knowledgeCount !== 'undefined' && (
+                <div>Knowledge files: {stats.knowledgeCount}</div>
+            )}
+            {stats && (
+                <div style={{opacity:0.9}}>
+                    <div>Queue: {stats.queueLength ?? '—'}</div>
+                    <div>Server Load: {stats.systemLoad ?? stats.serverLoad ?? '—'}</div>
+                    <div>Tokens: {stats.totalTokens ?? stats.tokenCount ?? '—'}</div>
+                    <div>Cost Estimate: {stats.costEstimate ?? '—'}</div>
+                </div>
+            )}
+            <button className="btn" onClick={load}>Refresh</button>
+        </div>
+    );
+};
+
 const AppHeader: FC<{ user: User; currentView: View | DemoView; setView: (view: any) => void; onSignOut: () => void; }> = ({ user, currentView, setView, onSignOut }) => {
     const views: { id: View | DemoView; label: string }[] = [
         { id: 'MAP', label: 'Map View' },
@@ -178,6 +231,11 @@ const AppHeader: FC<{ user: User; currentView: View | DemoView; setView: (view: 
         <header className="app-header">
             <div className="header-branding">
                 <img src={logoUrl} alt="SMARTLOCAL.AI Logo" className="header-logo" />
+                <div className="powered-by" style={{marginLeft:12, display:'flex', alignItems:'center', gap:8}}>
+                    <strong>Powered by Morrow.AI</strong>
+                    <span style={{opacity:0.8}}>|</span>
+                    <HealthBadge />
+                </div>
             </div>
             <nav className="app-nav">
                 {views.map(view => {
@@ -195,6 +253,9 @@ const AppHeader: FC<{ user: User; currentView: View | DemoView; setView: (view: 
                 })}
             </nav>
             <div className="header-user-info">
+                <div style={{ marginRight: 12 }}>
+                    <HealthBadge />
+                </div>
                 <img src={user.photoURL ?? undefined} alt={user.displayName ?? 'User'} />
                 <span className="user-name">{user.displayName}</span>
                 <button className="btn-sign-out" onClick={onSignOut}>Sign Out</button>
@@ -339,18 +400,12 @@ const LeadsView: FC = () => {
     const [busy, setBusy] = useState<string | null>(null);
     const userEmail = auth?.currentUser?.email?.toLowerCase() || '';
     const isAdmin = userEmail && ADMIN_EMAIL && userEmail === ADMIN_EMAIL.toLowerCase();
+
     const loadLeads = async () => {
         try {
-            // Ensure authenticated before calling admin-only endpoints
-            if (!auth?.currentUser) {
-                console.warn('Skipping /api/leads fetch until user is authenticated');
-                return;
-            }
+            if (!auth?.currentUser) return;
             const headers = await authHeader();
-            if (!('Authorization' in headers)) {
-                console.warn('No Authorization token available yet; delaying leads fetch');
-                return;
-            }
+            if (!('Authorization' in headers)) return;
             const resp = await fetch('/api/leads', { headers });
             if (resp.status === 401 || resp.status === 403) {
                 const text = await resp.text();
@@ -363,6 +418,13 @@ const LeadsView: FC = () => {
             console.error('Failed to load leads', e);
         }
     };
+
+    useEffect(() => {
+        const unsub = auth?.onAuthStateChanged?.(() => loadLeads());
+        loadLeads();
+        return () => { unsub && unsub(); };
+    }, []);
+
     const sendOutreach = async () => {
         setBusy('Sending outreach emails...');
         try {
@@ -373,6 +435,7 @@ const LeadsView: FC = () => {
             alert(`Error: ${e.message}`);
         } finally { setBusy(null); }
     };
+
     const runAudit = async (leadId: string) => {
         setBusy('Running audit...');
         try {
@@ -383,12 +446,7 @@ const LeadsView: FC = () => {
             alert(`Error: ${e.message}`);
         } finally { setBusy(null); }
     };
-    useEffect(() => {
-        // try loading when component mounts and when auth state changes
-        const unsub = auth?.onAuthStateChanged?.(() => loadLeads());
-        loadLeads();
-        return () => { unsub && unsub(); };
-    }, []);
+
     if (!isAdmin) {
         return (
             <div className="view-container">
@@ -400,6 +458,7 @@ const LeadsView: FC = () => {
             </div>
         );
     }
+
     return (
         <div className="view-container">
             <h2>Leads</h2>
@@ -423,9 +482,9 @@ const LeadsView: FC = () => {
 
 // Helper to attach Firebase ID token to API requests
 async function authHeader() {
-    if (!auth?.currentUser) return {};
+    if (!auth?.currentUser) return {} as Record<string,string>;
     const token = await auth.currentUser.getIdToken();
-    return { Authorization: `Bearer ${token}` };
+    return { Authorization: `Bearer ${token}` } as Record<string,string>;
 }
 
 const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientId: string) => Promise<void>; }> = ({ business, onSaveAudit }) => {
@@ -915,24 +974,23 @@ const AdvancedFeaturesView: FC = () => {
     const [compBusiness, setCompBusiness] = useState('');
     const [compLocation, setCompLocation] = useState('');
     const [compIndustry, setCompIndustry] = useState('');
-    
+
     // Content Calendar state
     const [calBusiness, setCalBusiness] = useState('');
     const [calIndustry, setCalIndustry] = useState('');
     const [calTimeframe, setCalTimeframe] = useState('30');
-    const [calPlatforms, setCalPlatforms] = useState(['facebook', 'instagram']);
+    const [calPlatforms, setCalPlatforms] = useState<string[]>(['facebook', 'instagram']);
 
     const handleFeatureAction = async (action: string) => {
         setIsProcessing(true);
         setError(null);
         setResult('');
         setGeneratedImages([]);
-        
+
         try {
-            let response: AIResponse;
-            
+            let response: any;
             switch (action) {
-                case 'seo-analysis':
+                case 'seo-analysis': {
                     if (!seoBusinessName.trim()) throw new Error('Business name is required');
                     response = await localAI.performSEOAnalysis({
                         businessName: seoBusinessName,
@@ -942,8 +1000,8 @@ const AdvancedFeaturesView: FC = () => {
                     });
                     setResult(response.analysis || response.text || 'No analysis generated');
                     break;
-                    
-                case 'social-content':
+                }
+                case 'social-content': {
                     if (!socialBusiness.trim() || !socialTopic.trim()) throw new Error('Business name and topic are required');
                     response = await localAI.generateSocialContent({
                         businessName: socialBusiness,
@@ -957,8 +1015,8 @@ const AdvancedFeaturesView: FC = () => {
                         setGeneratedImages(response.images);
                     }
                     break;
-                    
-                case 'competitor-analysis':
+                }
+                case 'competitor-analysis': {
                     if (!compBusiness.trim() || !compLocation.trim()) throw new Error('Business name and location are required');
                     response = await localAI.analyzeCompetitors({
                         businessName: compBusiness,
@@ -967,8 +1025,8 @@ const AdvancedFeaturesView: FC = () => {
                     });
                     setResult(response.analysis || response.text || 'No analysis generated');
                     break;
-                    
-                case 'content-calendar':
+                }
+                case 'content-calendar': {
                     if (!calBusiness.trim()) throw new Error('Business name is required');
                     response = await localAI.createContentCalendar({
                         businessName: calBusiness,
@@ -978,6 +1036,9 @@ const AdvancedFeaturesView: FC = () => {
                     });
                     setResult(response.calendar || response.text || 'No calendar generated');
                     break;
+                }
+                default:
+                    throw new Error('Unknown action');
             }
         } catch (e: any) {
             console.error('Advanced feature error:', e);
@@ -1015,6 +1076,9 @@ const AdvancedFeaturesView: FC = () => {
             <div className="advanced-features-header">
                 <h2>⚡ Advanced AI Features</h2>
                 <p>Powerful AI-driven tools for comprehensive local business growth and optimization.</p>
+                <div style={{ marginTop: '0.5rem' }}>
+                    <AIStatusPanel />
+                </div>
             </div>
             
             <div className="features-grid">
