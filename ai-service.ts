@@ -43,10 +43,24 @@ interface RateLimiter {
   interval: number;
 }
 
+interface AIServiceStats {
+  requestCount: number;
+  averageLatency: number;
+  lastError?: string;
+  lastRequestTime?: number;
+}
+
+type StatusCallback = (stats: AIServiceStats) => void;
+
 class LocalAIService {
   private baseUrl: string;
   private defaultOptions: AIServiceOptions;
   private rateLimiter: RateLimiter;
+  private stats: AIServiceStats = {
+    requestCount: 0,
+    averageLatency: 0
+  };
+  private statusSubscribers: Set<StatusCallback> = new Set();
   private retryDelayMs = 1000;
   private maxRetries = 3;
   
@@ -159,10 +173,22 @@ class LocalAIService {
       }
 
       const result = await response.json();
+      const duration = Date.now() - startTime;
+      
+      // Update stats
+      this.updateStats({
+        requestCount: this.stats.requestCount + 1,
+        averageLatency: Math.round(
+          (this.stats.averageLatency * this.stats.requestCount + duration) / 
+          (this.stats.requestCount + 1)
+        ),
+        lastRequestTime: Date.now(),
+        lastError: undefined
+      });
       
       await this.logUsage(endpoint, {
         success: true,
-        duration: Date.now() - startTime,
+        duration,
         provider: this.defaultOptions.provider as AIProvider
       });
       
@@ -197,6 +223,12 @@ class LocalAIService {
         );
       }
       
+      // Update stats with error
+      this.updateStats({
+        lastError: aiError.message,
+        lastRequestTime: Date.now()
+      });
+
       await this.logUsage(endpoint, {
         success: false,
         duration,
@@ -280,6 +312,28 @@ class LocalAIService {
       throw new Error(`Failed to get providers: HTTP ${response.status}`);
     }
     return response.json();
+  }
+
+  getProvider(): string {
+    return this.defaultOptions.provider || 'claude';
+  }
+
+  getModel(): string {
+    return this.defaultOptions.model || 'claude-3-sonnet-20240229';
+  }
+
+  subscribeToStatus(callback: StatusCallback): () => void {
+    this.statusSubscribers.add(callback);
+    callback(this.stats); // Initial callback with current stats
+    
+    return () => {
+      this.statusSubscribers.delete(callback);
+    };
+  }
+
+  private updateStats(update: Partial<AIServiceStats>) {
+    this.stats = { ...this.stats, ...update };
+    this.statusSubscribers.forEach(callback => callback(this.stats));
   }
 }
 
