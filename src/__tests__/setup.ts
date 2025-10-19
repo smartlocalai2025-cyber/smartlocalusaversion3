@@ -1,4 +1,13 @@
-import { vi } from 'vitest'
+import { vi, expect } from 'vitest';
+import '@testing-library/jest-dom';
+import type { Assertion } from 'vitest';
+
+declare module 'vitest' {
+  interface Assertion {
+    toBeInTheDocument(): void;
+    toHaveClass(className: string): void;
+  }
+}
 
 // Mock the import.meta.env values
 vi.stubGlobal('import.meta', {
