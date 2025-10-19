@@ -65,22 +65,60 @@ npm run test:ui
 
 ## 📦 Deployment
 
-The app is automatically deployed to GitHub Pages when pushing to the main branch.
-Visit: https://smartlocalai2025-cyber.github.io/smartlocalusaversion3/
+The app is deployed to Firebase Hosting.
+**Live URL:** https://smartlocalai-b092a.web.app
 
 Manual deployment:
 ```bash
 npm run build
-npm run preview  # Test production build locally
+firebase deploy --only hosting
 ```
 
-## 🔒 Security Features
+### Enable GitHub Pages (one-time)
 
-- Firebase Authentication
-- Request encryption in transit
-- Timeout and retry logic
-- Rate limiting
-- Admin-only sections
+If the deployment action fails with a 404, make sure GitHub Pages is enabled for this repository:
+
+- Go to Repository Settings → Pages
+- Build and deployment → Source: GitHub Actions
+- Save
+
+Our workflow uploads the `dist` folder as the Pages artifact and then deploys it using `actions/deploy-pages`. The site is built for the base path `/smartlocalusaversion3/` as configured in `vite.config.ts`.
+
+## 🔒 Security & Privacy
+
+### Authentication & Authorization
+- **Firebase Authentication**: Secure Google Sign-In with industry-standard OAuth 2.0
+- **ID Token Verification**: All API requests verified server-side
+- **Admin Controls**: Sensitive features restricted by email allowlist
+- **Session Management**: Automatic token refresh and secure logout
+
+### Data Protection
+- **HTTPS Enforced**: All traffic encrypted with TLS 1.3
+- **Security Headers**: CSP, HSTS, X-Frame-Options, and more configured
+- **No API Keys in Frontend**: Sensitive keys stay server-side only
+- **Secure Storage**: LocalStorage only for non-sensitive settings (UI preferences)
+- **Firebase Security Rules**: Database access restricted by auth state
+
+### Infrastructure Security
+- **Rate Limiting**: Built-in request throttling (60/min default)
+- **Timeout Protection**: Requests auto-abort after 30s
+- **Error Handling**: No sensitive info leaked in error messages
+- **CORS Configured**: Backend only accepts requests from authorized domains
+- **Regular Updates**: Dependencies monitored and updated
+
+### Privacy Guarantees
+- **No Third-Party Trackers**: No analytics or ad networks
+- **Minimal Data Collection**: Only what's needed for functionality
+- **Firebase Analytics**: Optional, can be disabled
+- **Local-First AI**: Your backend, your data
+- **No Data Sharing**: User data never sold or shared
+
+### Compliance Ready
+- GDPR-friendly (user data deletion on request)
+- SOC 2 compliant infrastructure (Firebase/Google Cloud)
+- Audit logs available via Firebase Console
+
+**See [SECURITY.md](SECURITY.md) for detailed security practices and [DEPLOYMENT.md](DEPLOYMENT.md) for secure deployment instructions.**
 
 ## 📚 API Examples
 

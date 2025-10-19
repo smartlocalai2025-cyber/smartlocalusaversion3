@@ -10,11 +10,20 @@ permissions:
   pages: write
   id-token: write
 
+# Ensure only one Pages deployment runs at a time
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Configure GitHub Pages (sets up static site defaults, .nojekyll, etc.)
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
