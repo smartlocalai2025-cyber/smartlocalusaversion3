@@ -1,4 +1,12 @@
+
+console.log('Starting Morrow.AI Express server...');
+const express = require('express');
+const { MorrowAI } = require('./morrow');
+const app = express();
+app.use(express.json());
+const morrow = new MorrowAI();
 const ADMIN_TOKEN = process.env.MORROW_ADMIN_TOKEN || 'localdev';
+
 // Add knowledge file (admin only, basic)
 app.post('/api/knowledge/add', (req, res) => {
   const token = req.headers['x-admin-token'] || req.query.token;
@@ -15,13 +23,6 @@ app.post('/api/knowledge/add', (req, res) => {
     res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
 });
-// Morrow.AI Express server for Cloud Run/Firebase
-const express = require('express');
-const { MorrowAI } = require('./morrow');
-const app = express();
-app.use(express.json());
-
-const morrow = new MorrowAI();
 
 // Health + Stats + Features
 app.get('/api/health', (req, res) => {
