@@ -21,10 +21,11 @@ interface Business {
     website?: string;
     address?: string;
     websiteContent?: any;
-    location?: string;
-    industry?: string;
-    notes?: string;
-    placesData?: any;
+        // Enriched optional fields threaded from MapView and profile
+        notes?: string;
+        location?: string;
+        industry?: string;
+        placesData?: any;
 }
 
 interface Profile extends Business {
