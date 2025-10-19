@@ -1,6 +1,8 @@
 // AI Service Layer for SMARTLOCAL.AI
 // Handles communication with local AI server
 
+import { auth } from './firebase';
+
 interface AIResponse {
   text?: string;
   images?: string[];
@@ -15,37 +17,56 @@ interface AIResponse {
 }
 
 interface AIServiceOptions {
-  provider?: 'ollama' | 'openai' | 'gemini';
+  provider?: 'ollama' | 'openai' | 'gemini' | 'claude';
   temperature?: number;
   max_tokens?: number;
   model?: string;
 }
 
-import { auth } from './firebase';
-
 class LocalAIService {
   private baseUrl: string;
+  private defaultOptions: AIServiceOptions;
   
-  constructor(baseUrl: string = 'http://localhost:3001') {
-    this.baseUrl = baseUrl;
+  constructor() {
+    this.baseUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || 'http://localhost:3001';
+    this.defaultOptions = {
+      provider: (import.meta.env.VITE_DEFAULT_AI_PROVIDER as string) || 'claude',
+      model: (import.meta.env.VITE_DEFAULT_AI_MODEL as string) || 'claude-3-sonnet-20240229',
+    };
   }
 
   private async request(endpoint: string, data: any): Promise<AIResponse> {
+    const controller = new AbortController();
+    const timeout = Number(import.meta.env.VITE_REQUEST_TIMEOUT) || 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
     try {
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      // Attach Firebase ID token for admin-protected endpoints
-      try {
-        if (auth?.currentUser) {
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Provider': this.defaultOptions.provider,
+        'X-Model': this.defaultOptions.model
+      };
+      
+      if (auth?.currentUser) {
+        try {
           const token = await auth.currentUser.getIdToken();
-          headers = { ...headers, Authorization: `Bearer ${token}` };
+          headers.Authorization = `Bearer ${token}`;
+        } catch (error) {
+          console.warn('Failed to get auth token:', error);
         }
-      } catch {}
+      }
 
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          options: this.defaultOptions
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -53,39 +74,50 @@ class LocalAIService {
       }
 
       return await response.json();
-    } catch (error) {
-      console.error(`AI Service Error (${endpoint}):`, error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${timeout}ms`);
+      }
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
-  // Backward compatibility with Firebase Functions format
-  async generateContent(action: string, params: any, options: AIServiceOptions = {}): Promise<AIResponse> {
-    return this.request('/api/ai/generate', {
-      action,
-      params,
-      options,
-    });
+  async checkHealth(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/health`);
+      return response.ok;
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return false;
+    }
   }
 
-  // Direct chat interface
-  async chat(prompt: string, conversationId?: string, options: AIServiceOptions = {}): Promise<AIResponse> {
+  // Direct chat interface with Claude
+  async chat(prompt: string, conversationId?: string): Promise<AIResponse> {
     return this.request('/api/ai/chat', {
       prompt,
       conversationId,
-      options,
     });
   }
 
-  // Image generation
-  async generateImage(prompt: string, options: any = {}): Promise<AIResponse> {
+  // Generate content with Claude
+  async generateContent(action: string, params: any): Promise<AIResponse> {
+    return this.request('/api/ai/generate', {
+      action,
+      params,
+    });
+  }
+
+  // Image generation (if supported by model)
+  async generateImage(prompt: string): Promise<AIResponse> {
     return this.request('/api/ai/image', {
       prompt,
-      options,
     });
   }
 
-  // 🎯 Advanced SEO Analysis
+  // SEO Analysis with Claude
   async performSEOAnalysis(businessData: {
     businessName: string;
     website?: string;
@@ -95,7 +127,7 @@ class LocalAIService {
     return this.request('/api/features/seo-analysis', businessData);
   }
 
-  // 🖼️ Social Media Content Generation
+  // Social Media Content Generation
   async generateSocialContent(contentData: {
     businessName: string;
     topic: string;
@@ -106,60 +138,21 @@ class LocalAIService {
     return this.request('/api/features/social-content', contentData);
   }
 
-  // 🔍 Competitor Analysis
-  async analyzeCompetitors(competitorData: {
-    businessName: string;
-    location: string;
-    industry?: string;
-    competitors?: string[];
-  }): Promise<AIResponse> {
-    return this.request('/api/features/competitor-analysis', competitorData);
-  }
-
-  // 📊 Custom Report Generation
-  async generateCustomReport(reportData: {
-    businessName: string;
-    reportType: string;
-    data?: any;
-    template?: string;
-  }): Promise<AIResponse> {
-    return this.request('/api/features/custom-report', reportData);
-  }
-
-  // 📈 Content Calendar
-  async createContentCalendar(calendarData: {
-    businessName: string;
-    industry?: string;
-    timeframe?: string;
-    platforms?: string[];
-  }): Promise<AIResponse> {
-    return this.request('/api/features/content-calendar', calendarData);
-  }
-
-  // 🤖 AI Assistant
-  async askAssistant(message: string, context?: string, conversationId?: string): Promise<AIResponse> {
-    return this.request('/api/features/assistant', {
-      message,
-      context,
-      conversationId,
-    });
-  }
-
   // Get available features
   async getFeatures(): Promise<any> {
     const response = await fetch(`${this.baseUrl}/api/features`);
-    return response.json();
-  }
-
-  // Check AI service health
-  async checkHealth(): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/ai/health`);
+    if (!response.ok) {
+      throw new Error(`Failed to get features: HTTP ${response.status}`);
+    }
     return response.json();
   }
 
   // Get available providers
   async getProviders(): Promise<any> {
     const response = await fetch(`${this.baseUrl}/api/ai/providers`);
+    if (!response.ok) {
+      throw new Error(`Failed to get providers: HTTP ${response.status}`);
+    }
     return response.json();
   }
 }
