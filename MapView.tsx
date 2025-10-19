@@ -300,6 +300,10 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
 
     // Only trigger business search once after centering on user location
     const hasLoadedBusinesses = useRef(false);
+    // Track if the map is being moved programmatically
+    const programmaticMove = useRef(false);
+    // Expose showBusinessesInBounds to the Update button handler
+    const showBusinessesInBoundsRef = useRef<null | ((centerOverride?: any) => void)>(null);
     const initMap = (google: typeof window.google, lat?: number, lng?: number, useLocation?: boolean) => {
         if (!mapRef.current || !searchInputRef.current) return;
 
@@ -321,43 +325,51 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             }
         };
         if (useLocation) {
+            programmaticMove.current = true;
             showOnce();
+            setTimeout(() => { programmaticMove.current = false; }, 500);
         } else {
             // If not using geolocation, show businesses after map is ready
-            setTimeout(showOnce, 500);
+            programmaticMove.current = true;
+            setTimeout(() => {
+                showOnce();
+                programmaticMove.current = false;
+            }, 500);
         }
 
-        // Listen for map drag/zoom to show update prompt
+        // Listen for map drag/zoom to show update prompt (only if not programmatic)
         listeners.current.push(
             (window as any).google.maps.event.addListener(mapInstance.current, 'idle', () => {
-                if (hasLoadedBusinesses.current) {
+                if (hasLoadedBusinesses.current && !programmaticMove.current) {
                     setShowUpdatePrompt(true);
                 }
             })
         );
 
-    function showBusinessesInBounds(centerOverride?: any) {
-            if (!mapInstance.current || !placesService.current) return;
-            setLoading(true);
-            // Clear old markers before adding new ones
-            markers.current.forEach(marker => marker.setMap(null));
-            markers.current = [];
-            const center = centerOverride || mapInstance.current.getCenter();
-            // Use a smaller search radius for performance
-            const request = {
-                location: center,
-                radius: 1000, // meters
-                query: 'business',
-            };
-            placesService.current.textSearch(request, (results, status) => {
-                setLoading(false);
-                if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
-                    createMarkers(results);
-                } else {
-                    console.warn("Places search failed with status:", status);
-                }
-            });
-        }
+    const showBusinessesInBounds = (centerOverride?: any) => {
+        if (!mapInstance.current || !placesService.current) return;
+        setLoading(true);
+        // Clear old markers before adding new ones
+        markers.current.forEach(marker => marker.setMap(null));
+        markers.current = [];
+        const center = centerOverride || mapInstance.current.getCenter();
+        // Use a smaller search radius for performance
+        const request = {
+            location: center,
+            radius: 1000, // meters
+            query: 'business',
+        };
+        placesService.current.textSearch(request, (results, status) => {
+            setLoading(false);
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+                createMarkers(results);
+            } else {
+                console.warn("Places search failed with status:", status);
+            }
+        });
+    };
+    // Expose to ref for use in Update button
+
 
 
         // Autocomplete setup (only once)
@@ -383,8 +395,10 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             const loc = e?.latLng;
             if (!loc) return;
             // Center/zoom the map to the clicked location
+            programmaticMove.current = true;
             mapInstance.current!.setCenter(loc);
             mapInstance.current!.setZoom(14);
+            setTimeout(() => { programmaticMove.current = false; }, 500);
             // Drop or move a selected marker
             if (selectedMarker.current) {
                 selectedMarker.current.setMap(null);
@@ -400,9 +414,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             // When user fine-tunes by dragging, reload nearby businesses
             selectedMarker.current.addListener('dragend', (ev: any) => {
                 const newLoc = ev?.latLng || loc;
+                programmaticMove.current = true;
                 mapInstance.current!.setCenter(newLoc);
                 // @ts-ignore center override accepted by our helper
                 showBusinessesInBounds(newLoc);
+                setTimeout(() => { programmaticMove.current = false; }, 500);
             });
             // Load nearby businesses around the chosen point
             showBusinessesInBounds(loc);
@@ -571,6 +587,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             </div>
         );
     }
+    // Expose to ref for use in Update button
+    showBusinessesInBoundsRef.current = showBusinessesInBounds;
     if (locationPermission === 'denied') {
         return (
             <div className="map-view-wrapper" style={{ minHeight: 400 }}>
@@ -652,10 +670,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                         <span>Update map to show new businesses?</span>
                         <button
                             onClick={() => {
-                                if (mapInstance.current) {
-                                    // @ts-ignore
-                                    showBusinessesInBounds();
+                                if (mapInstance.current && showBusinessesInBoundsRef.current) {
+                                    programmaticMove.current = true;
+                                    showBusinessesInBoundsRef.current();
                                     setShowUpdatePrompt(false);
+                                    setTimeout(() => { programmaticMove.current = false; }, 500);
                                 }
                             }}
                             style={{
