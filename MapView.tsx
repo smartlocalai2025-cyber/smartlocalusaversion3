@@ -141,12 +141,31 @@ function sanitizePlaces(detail: any) {
             'place_id','name','url','website','vicinity','formatted_address','types','business_status','price_level','rating','user_ratings_total','utc_offset_minutes'
         ]);
         const phones = pick(detail, ['formatted_phone_number','international_phone_number']);
-        const opening = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods']) : undefined;
+        const openingRaw = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods','open_now']) : undefined;
+        const isOpenNow = (() => {
+            try {
+                if (detail.opening_hours) {
+                    if (typeof detail.opening_hours.isOpen === 'function') return detail.opening_hours.isOpen();
+                    if (typeof detail.opening_hours.open_now === 'boolean') return detail.opening_hours.open_now;
+                }
+            } catch {}
+            return typeof openingRaw?.open_now === 'boolean' ? openingRaw.open_now : undefined;
+        })();
+        const opening = openingRaw ? { ...openingRaw, isOpenNow } : undefined;
         const addr = Array.isArray(detail.address_components) ? detail.address_components.map((c:any)=>({ long_name:c.long_name, short_name:c.short_name, types:c.types })) : undefined;
         const photos = Array.isArray(detail.photos) ? detail.photos.slice(0,5).map((p:any)=>({ height:p.height, width:p.width, html_attributions:p.html_attributions })) : undefined;
         const reviews = Array.isArray(detail.reviews) ? detail.reviews.slice(0,5).map((r:any)=>({ author_name:r.author_name, rating:r.rating, relative_time_description:r.relative_time_description, text:r.text })) : undefined;
         const editorial = detail.editorial_summary ? pick(detail.editorial_summary, ['overview']) : undefined;
-        return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial };
+        let geometry;
+        const loc = detail.geometry?.location;
+        if (loc) {
+            const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+            const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+            if (typeof lat === 'number' && typeof lng === 'number') {
+                geometry = { lat, lng };
+            }
+        }
+        return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial, geometry };
     } catch { return null; }
 }
 
@@ -459,12 +478,31 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                 'place_id','name','url','website','vicinity','formatted_address','types','business_status','price_level','rating','user_ratings_total','utc_offset_minutes'
             ]);
             const phones = pick(detail, ['formatted_phone_number','international_phone_number']);
-            const opening = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods']) : undefined;
+            const openingRaw = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods','open_now']) : undefined;
+            const isOpenNow = (() => {
+                try {
+                    if (detail.opening_hours) {
+                        if (typeof detail.opening_hours.isOpen === 'function') return detail.opening_hours.isOpen();
+                        if (typeof detail.opening_hours.open_now === 'boolean') return detail.opening_hours.open_now;
+                    }
+                } catch {}
+                return typeof openingRaw?.open_now === 'boolean' ? openingRaw.open_now : undefined;
+            })();
+            const opening = openingRaw ? { ...openingRaw, isOpenNow } : undefined;
             const addr = Array.isArray(detail.address_components) ? detail.address_components.map((c:any)=>({ long_name:c.long_name, short_name:c.short_name, types:c.types })) : undefined;
             const photos = Array.isArray(detail.photos) ? detail.photos.slice(0,5).map((p:any)=>({ height:p.height, width:p.width, html_attributions:p.html_attributions })) : undefined;
             const reviews = Array.isArray(detail.reviews) ? detail.reviews.slice(0,5).map((r:any)=>({ author_name:r.author_name, rating:r.rating, relative_time_description:r.relative_time_description, text:r.text })) : undefined;
             const editorial = detail.editorial_summary ? pick(detail.editorial_summary, ['overview']) : undefined;
-            return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial };
+            let geometry;
+            const loc = detail.geometry?.location;
+            if (loc) {
+                const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+                const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+                if (typeof lat === 'number' && typeof lng === 'number') {
+                    geometry = { lat, lng };
+                }
+            }
+            return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial, geometry };
         } catch { return null; }
     }
     // Expose to ref for use in Update button

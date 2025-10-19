@@ -1,4 +1,5 @@
-import React, { useState, useEffect, type FC, useCallback } from 'react';
+import React, { useState, useEffect, type FC, useCallback, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
@@ -40,6 +41,80 @@ interface Audit {
     ai_report: string;
     date_completed: { toDate: () => Date };
 }
+
+const PLACE_TYPE_IGNORE = new Set([
+    'establishment',
+    'point_of_interest',
+    'premise',
+    'food',
+    'store'
+]);
+
+function deriveLocationFromPlace(place: any): string {
+    if (!place) return '';
+    if (typeof place.formatted_address === 'string' && place.formatted_address.trim()) {
+        return place.formatted_address.trim();
+    }
+    if (typeof place.vicinity === 'string' && place.vicinity.trim()) {
+        return place.vicinity.trim();
+    }
+    return '';
+}
+
+function guessIndustryFromPlace(place: any): string {
+    if (!place || !Array.isArray(place.types)) return '';
+    const candidate = place.types.find((type: string) => type && !PLACE_TYPE_IGNORE.has(type));
+    return candidate ? candidate.replace(/_/g, ' ') : '';
+}
+
+function extractPhoneFromPlace(place: any): string {
+    if (!place) return '';
+    if (typeof place.formatted_phone_number === 'string' && place.formatted_phone_number.trim()) {
+        return place.formatted_phone_number.trim();
+    }
+    if (typeof place.international_phone_number === 'string' && place.international_phone_number.trim()) {
+        return place.international_phone_number.trim();
+    }
+    return '';
+}
+
+const auditContextCardStyle: CSSProperties = {
+    marginTop: '1.5rem',
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '12px',
+    padding: '1.25rem',
+    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.08)'
+};
+
+const auditContextListStyle: CSSProperties = {
+    listStyle: 'none',
+    margin: '0.75rem 0 0 0',
+    padding: 0,
+    display: 'grid',
+    gap: '0.5rem'
+};
+
+const auditContextDetailsStyle: CSSProperties = {
+    marginTop: '0.75rem'
+};
+
+const auditBadgeStyle: CSSProperties = {
+    borderRadius: '9999px',
+    padding: '0.25rem 0.75rem',
+    background: '#edf2ff',
+    color: '#1d4ed8',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    textTransform: 'uppercase' as CSSProperties['textTransform']
+};
+
+const auditLinkStyle: CSSProperties = {
+    display: 'inline-block',
+    marginTop: '0.75rem',
+    color: '#1d4ed8',
+    fontWeight: 600
+};
 
 
 // --- Logo ---
@@ -495,19 +570,79 @@ async function authHeader() {
 }
 
 const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientId: string) => Promise<void>; }> = ({ business, onSaveAudit }) => {
+    const placeData = (business as any)?.placesData;
+    const initialLocation = business?.location || business?.address || deriveLocationFromPlace(placeData);
+    const initialIndustry = business?.industry || guessIndustryFromPlace(placeData);
+    const initialWebsite = business?.website || (placeData?.website || '');
+
     const [businessName, setBusinessName] = useState(business?.name || '');
-    const [websiteUrl, setWebsiteUrl] = useState(business?.website || '');
-    const [industry, setIndustry] = useState('');
-    const [location, setLocation] = useState('');
+    const [websiteUrl, setWebsiteUrl] = useState(initialWebsite);
+    const [industry, setIndustry] = useState(initialIndustry);
+    const [location, setLocation] = useState(initialLocation);
     const [report, setReport] = useState('');
     const [isAuditing, setIsAuditing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const websiteIntel = business?.websiteContent;
+    const mapApiKey = (import.meta as any)?.env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+
+    const placeSummary = useMemo(() => {
+        if (!placeData) return null;
+        const categories = Array.isArray(placeData.types)
+            ? placeData.types
+                .filter((type: string) => type && !PLACE_TYPE_IGNORE.has(type))
+                .slice(0, 3)
+                .map((type: string) => type.replace(/_/g, ' ').replace(/\b\w/g, (char: string) => char.toUpperCase()))
+            : [];
+        const rating = typeof placeData.rating === 'number' ? placeData.rating : null;
+        const reviewsCount = typeof placeData.user_ratings_total === 'number' ? placeData.user_ratings_total : null;
+        const phone = extractPhoneFromPlace(placeData);
+        const hours = Array.isArray(placeData.opening_hours?.weekday_text) ? placeData.opening_hours.weekday_text : [];
+        const isOpenNow = typeof placeData.opening_hours?.isOpenNow === 'boolean' ? placeData.opening_hours.isOpenNow : undefined;
+        const staticMapUrl = mapApiKey && placeData.geometry
+            ? `https://maps.googleapis.com/maps/api/staticmap?center=${placeData.geometry.lat},${placeData.geometry.lng}&zoom=15&size=640x280&scale=2&maptype=roadmap&markers=color:red|${placeData.geometry.lat},${placeData.geometry.lng}&key=${mapApiKey}`
+            : null;
+        const reviews = Array.isArray(placeData.reviews) ? placeData.reviews.slice(0, 3) : [];
+        const address = placeData.formatted_address || placeData.vicinity || '';
+        const url = typeof placeData.url === 'string' ? placeData.url : null;
+        return {
+            categories,
+            rating,
+            reviewsCount,
+            phone,
+            hours,
+            isOpenNow,
+            staticMapUrl,
+            reviews,
+            address,
+            url,
+            status: placeData.business_status || null
+        };
+    }, [placeData, mapApiKey]);
+
+    const websiteIntelSummary = useMemo(() => {
+        if (!websiteIntel) return null;
+        const h1s = Array.isArray(websiteIntel.h1) ? websiteIntel.h1.filter(Boolean).slice(0, 3) : [];
+        const h2s = Array.isArray(websiteIntel.h2) ? websiteIntel.h2.filter(Boolean).slice(0, 3) : [];
+        return {
+            title: websiteIntel.title || '',
+            description: websiteIntel.description || '',
+            h1s,
+            h2s
+        };
+    }, [websiteIntel]);
 
     useEffect(() => {
+        const currentPlace = (business as any)?.placesData;
+        const derivedLocation = business?.location || business?.address || deriveLocationFromPlace(currentPlace);
+        const derivedIndustry = business?.industry || guessIndustryFromPlace(currentPlace);
+        const derivedWebsite = business?.website || (currentPlace?.website || '');
+
         setBusinessName(business?.name || '');
-        setWebsiteUrl(business?.website || '');
+        setWebsiteUrl(derivedWebsite);
+        setLocation(derivedLocation);
+        setIndustry(derivedIndustry);
         setReport('');
         setError(null);
         setSaveSuccess(false);
@@ -647,6 +782,98 @@ const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientI
                      {isAuditing ? 'Generating Report...' : 'Start AI Audit'}
                 </button>
             </div>
+            {placeSummary && (
+                <div style={auditContextCardStyle}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                        <div>
+                            <h3 style={{ margin: '0 0 0.25rem 0' }}>Google Business Snapshot</h3>
+                            {placeSummary.categories && placeSummary.categories.length > 0 && (
+                                <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+                                    {placeSummary.categories.join(' • ')}
+                                </div>
+                            )}
+                        </div>
+                        {placeSummary.status && (
+                            <span style={auditBadgeStyle}>{placeSummary.status.replace(/_/g, ' ')}</span>
+                        )}
+                    </div>
+                    {placeSummary.staticMapUrl && (
+                        <img
+                            src={placeSummary.staticMapUrl}
+                            alt={`Map preview for ${businessName || business?.name || 'selected business'}`}
+                            style={{ width: '100%', borderRadius: '8px', marginTop: '0.75rem' }}
+                            loading="lazy"
+                        />
+                    )}
+                    <ul style={auditContextListStyle}>
+                        {placeSummary.address && <li><strong>Address:</strong> {placeSummary.address}</li>}
+                        {placeSummary.rating !== null && (
+                            <li>
+                                <strong>Rating:</strong> {placeSummary.rating.toFixed(1)}
+                                {placeSummary.reviewsCount !== null ? ` (${placeSummary.reviewsCount} reviews)` : ''}
+                            </li>
+                        )}
+                        {placeSummary.phone && <li><strong>Phone:</strong> {placeSummary.phone}</li>}
+                        {typeof placeSummary.isOpenNow === 'boolean' && (
+                            <li><strong>Status:</strong> {placeSummary.isOpenNow ? 'Open now' : 'Currently closed'}</li>
+                        )}
+                    </ul>
+                    {placeSummary.hours && placeSummary.hours.length > 0 && (
+                        <details style={auditContextDetailsStyle}>
+                            <summary>Hours</summary>
+                            <ul style={{ listStyle: 'none', margin: '0.5rem 0 0 0', padding: 0, display: 'grid', gap: '0.35rem' }}>
+                                {placeSummary.hours.map((line: string, idx: number) => (
+                                    <li key={`hours-${idx}`} style={{ color: '#475569' }}>{line}</li>
+                                ))}
+                            </ul>
+                        </details>
+                    )}
+                    {placeSummary.reviews && placeSummary.reviews.length > 0 && (
+                        <details style={auditContextDetailsStyle}>
+                            <summary>Recent Reviews</summary>
+                            <ul style={{ listStyle: 'none', margin: '0.5rem 0 0 0', padding: 0, display: 'grid', gap: '0.75rem' }}>
+                                {placeSummary.reviews.map((review: any, idx: number) => (
+                                    <li key={`review-${idx}`} style={{ color: '#475569' }}>
+                                        <div style={{ fontWeight: 600 }}>
+                                            {(review.author_name || 'Reviewer')}{typeof review.rating === 'number' ? ` — ${review.rating}/5` : ''}
+                                        </div>
+                                        {review.relative_time_description && (
+                                            <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>{review.relative_time_description}</div>
+                                        )}
+                                        {review.text && <div style={{ marginTop: '0.25rem' }}>{review.text}</div>}
+                                    </li>
+                                ))}
+                            </ul>
+                        </details>
+                    )}
+                    {placeSummary.url && (
+                        <a href={placeSummary.url} target="_blank" rel="noopener noreferrer" style={auditLinkStyle}>
+                            View on Google Maps →
+                        </a>
+                    )}
+                </div>
+            )}
+            {websiteIntelSummary && (
+                <div style={auditContextCardStyle}>
+                    <h3 style={{ margin: '0 0 0.5rem 0' }}>Website Signals</h3>
+                    <ul style={auditContextListStyle}>
+                        {websiteIntelSummary.title && <li><strong>Title:</strong> {websiteIntelSummary.title}</li>}
+                        {websiteIntelSummary.description && <li><strong>Description:</strong> {websiteIntelSummary.description}</li>}
+                        {websiteIntelSummary.h1s.length > 0 && (
+                            <li><strong>H1:</strong> {websiteIntelSummary.h1s.join(' | ')}</li>
+                        )}
+                        {websiteIntelSummary.h2s.length > 0 && (
+                            <li><strong>H2:</strong> {websiteIntelSummary.h2s.join(' | ')}</li>
+                        )}
+                    </ul>
+                </div>
+            )}
+            {typeof business?.notes === 'string' && business.notes.trim() && (
+                <div style={auditContextCardStyle}>
+                    <h3 style={{ margin: '0 0 0.5rem 0' }}>Consultant Notes</h3>
+                    <p style={{ margin: 0, color: '#475569', whiteSpace: 'pre-line' }}>{business.notes.trim()}</p>
+                </div>
+            )}
             <div className={`result-container ${report ? 'has-content' : ''} ${error ? 'error' : ''}`}>
                 {isAuditing && <div className="loading-spinner small"></div>}
                 {error && <p>{error}</p>}

@@ -432,6 +432,7 @@ class MorrowAI {
     const placeBits = placesData ? [
       placesData.rating ? `Rating: ${placesData.rating} (${placesData.user_ratings_total} reviews)` : null,
       placesData.business_status ? `Status: ${placesData.business_status}` : null,
+      placesData.opening_hours && typeof placesData.opening_hours.isOpenNow === 'boolean' ? `Open Now: ${placesData.opening_hours.isOpenNow ? 'Yes' : 'No'}` : null,
       placesData.price_level !== undefined ? `Price Level: ${placesData.price_level}` : null,
       placesData.formatted_phone_number ? `Phone: ${placesData.formatted_phone_number}` : null,
     ].filter(Boolean).map(s=>`• ${s}`).join('\n') : '';
