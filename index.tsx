@@ -6,6 +6,7 @@ import { StatusIndicator } from './src/components/StatusIndicator';
 import { auth, signInWithGoogle, signOut, type User, firebaseError, db, collection, addDoc, query, where, orderBy, getDocs, functions, httpsCallable } from './firebase';
 import { MapView } from './MapView';
 import { localAI, type AIResponse } from './ai-service';
+import { logoUrl, logoAlt, appName } from './src/branding';
 import CustomerProfile from './CustomerProfile';
 import type { HttpsCallableResult, HttpsCallable } from 'firebase/functions';
 
@@ -35,8 +36,7 @@ interface Audit {
 
 
 // --- Logo ---
-// Served from Vite public/ folder
-const logoUrl = '/assets/logo.svg';
+// Centralized in branding.ts; served from Vite public/ folder
 
 // --- Header Component ---
 const Header: FC<{ user: User | null }> = ({ user }) => {
@@ -46,7 +46,7 @@ const Header: FC<{ user: User | null }> = ({ user }) => {
   return (
     <header className="app-header">
       <div className="header-left">
-        <img src={logoUrl} alt="SmartLocal Logo" className="logo" />
+    <img src={logoUrl} alt={logoAlt} className="logo" />
       </div>
       <div className="header-center">
         <div className="ai-status">
@@ -93,7 +93,7 @@ const ADMIN_EMAIL = (import.meta as any)?.env?.VITE_ADMIN_EMAIL || 'tjmorrow909@
 
 const LoadingScreen: FC = () => (
     <div className="loading-screen" aria-label="Loading application">
-        <img src={logoUrl} alt="SMARTLOCAL.AI Logo" className="header-logo" />
+    <img src={logoUrl} alt={logoAlt} className="header-logo" />
         <div className="loading-spinner"></div>
     </div>
 );
@@ -106,7 +106,7 @@ const LoadingScreen: FC = () => (
 const LoginView: FC = () => (
     <div className="login-view">
         <div className="login-box">
-            <img src={logoUrl} alt="SMARTLOCAL.AI Logo" className="header-logo" />
+            <img src={logoUrl} alt={logoAlt} className="header-logo" />
             <h1>AI-Powered Local Business Growth</h1>
             <p>Sign in to access your dashboard and start optimizing your local presence.</p>
             <button className="btn btn-google" onClick={signInWithGoogle}>
@@ -230,7 +230,7 @@ const AppHeader: FC<{ user: User; currentView: View | DemoView; setView: (view: 
     return (
         <header className="app-header">
             <div className="header-branding">
-                <img src={logoUrl} alt="SMARTLOCAL.AI Logo" className="header-logo" />
+                <img src={logoUrl} alt={logoAlt} className="header-logo" />
                 <div className="powered-by" style={{marginLeft:12, display:'flex', alignItems:'center', gap:8}}>
                     <strong>Powered by Morrow.AI</strong>
                     <span style={{opacity:0.8}}>|</span>
