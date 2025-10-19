@@ -72,7 +72,19 @@ class LocalAIService {
   private maxRetries = 3;
 
   constructor() {
-    this.baseUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || 'http://localhost:3001';
+    const envUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || '';
+    // Prefer explicit env URL when provided; otherwise
+    // - use same-origin ("") when running on a hosted domain
+    // - fall back to localhost for local development
+    if (envUrl) {
+      this.baseUrl = envUrl;
+    } else if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      const isHosted = host !== 'localhost' && host !== '127.0.0.1';
+      this.baseUrl = isHosted ? '' : 'http://localhost:3001';
+    } else {
+      this.baseUrl = 'http://localhost:3001';
+    }
     const savedProvider = (typeof localStorage !== 'undefined' && localStorage.getItem('ai.provider')) as AIProviderName | null;
     const provider = (savedProvider || (import.meta.env.VITE_DEFAULT_AI_PROVIDER as AIProviderName) || 'claude') as AIProviderName;
     this.defaultOptions = {
