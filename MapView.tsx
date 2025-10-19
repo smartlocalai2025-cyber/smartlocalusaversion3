@@ -374,14 +374,17 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         };
         placesService.current.textSearch(request, (results, status) => {
             setLoading(false);
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length) {
                 createMarkers(results);
+                setShowUpdatePrompt(false);
             } else {
-                console.warn("Places search failed with status:", status);
+                console.warn("Places search failed or empty results:", status);
+                try { createDefaultMarkers(window.google); } catch {}
             }
         });
     };
     // Expose to ref for use in Update button
+    showBusinessesInBoundsRef.current = showBusinessesInBounds;
 
 
 
@@ -526,10 +529,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         setLoading(true);
         placesService.current.textSearch(request, (results, status) => {
              setLoading(false);
-            if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+            if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length) {
                 createMarkers(results);
             } else {
-                console.warn("Places search failed with status:", status);
+                console.warn("Places search failed or empty results:", status);
+                try { createDefaultMarkers(window.google); } catch {}
             }
         });
     };
