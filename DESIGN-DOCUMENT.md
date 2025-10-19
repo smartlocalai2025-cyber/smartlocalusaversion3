@@ -98,7 +98,7 @@ SMARTLOCAL.AI is a dual-sided platform:
 ┌─────────────────────────────────────────────────────────────┐
 │                   BACKEND LAYER                             │
 │  ┌──────────────────────────────────────────────────┐      │
-│  │         AI Server (Express.js - Port 3001)       │      │
+│  │   AI Server (Express.js on Cloud Run - PORT 8080)│      │
 │  │  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │      │
 │  │  │AI Routes │  │Customer  │  │ Notification  │  │      │
 │  │  │          │  │Routes    │  │   Service     │  │      │
@@ -107,7 +107,7 @@ SMARTLOCAL.AI is a dual-sided platform:
 └─────────────────────────────────────────────────────────────┘
                         │
         ┌───────────────┼───────────────┐
-        ▼               ▼               ▼
+  ▼               ▼               ▼
 ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
 │  Firebase   │ │Local Storage│ │External APIs│
 │  Firestore  │ │(JSON files) │ │SendGrid/    │
@@ -171,12 +171,12 @@ ai-server/
 ### Backend Stack
 | Technology | Purpose | Version |
 |-----------|---------|---------|
-| Node.js | Runtime | 22.14.0 |
-| Express.js | Web Framework | 4.19.2 |
-| Firebase Admin | Server-side Firebase | Latest |
-| SendGrid | Email Service | Latest |
-| Twilio | SMS Service | Latest |
-| Axios | HTTP Client | 1.7.2 |
+| Node.js | Runtime | 18 (Cloud Run base image) |
+| Express.js | Web Framework | 4.18.x (ai-server), 4.21.x (root dep) |
+| Firebase Admin | Server-side Firebase | Planned |
+| SendGrid | Email Service | Planned |
+| Twilio | SMS Service | Planned |
+| Axios | HTTP Client | Planned |
 
 ### AI/LLM Providers
 | Provider | Use Case | Model |
@@ -188,17 +188,28 @@ ai-server/
 ### Infrastructure
 | Service | Purpose |
 |---------|---------|
-| Firebase Hosting | Frontend deployment |
-| Firebase Firestore | NoSQL database |
-| Firebase Functions | Serverless functions |
-| Firebase Authentication | User management |
-| Local Server | AI inference (dev/production) |
+| Firebase Hosting | Frontend deployment + proxy to Cloud Run (/api/** rewrites) |
+| Cloud Run | Hosts Express AI server (public, us-central1) |
+| Google Cloud Build | Container builds for ai-server |
+| Firebase Authentication | User management (frontend) |
+| Firebase Firestore | NoSQL database (planned) |
 
 ---
 
 ## Code Structure & Organization
 
-### Design Patterns
+### Backend Modules (Morrow.AI v2)
+
+- `routes/agent.ts`: Express handlers for agent endpoints, with env key guards and rate limits
+- `services/maps.ts`: Google Maps business scanner, deduplication, Firestore sync
+- `services/audit.ts`: Audit logic, report generation, event logging
+- `services/outreach.ts`: Email/SMS outreach, suppression, rate limiting
+- `services/cron.ts`: Scheduler jobs for daily automations, quiet hours, suppression
+
+### UI Hooks
+- `MapView`: Triggers agent scans, displays lead status
+- `AIAssistantView`: Converses with agent, shows automation status, allows manual triggers
+
 
 #### 1. Service Layer Pattern (Backend)
 ```javascript
@@ -413,7 +424,7 @@ Response:
 
 ## Database Schema
 
-### Firebase Firestore Collections
+### Firebase Firestore Collections (v2)
 
 #### `clients` Collection
 ```javascript
@@ -446,6 +457,63 @@ Response:
 ```
 
 #### `customers` Collection (Firestore)
+
+#### `leads` Collection
+```javascript
+{
+  id: "auto-generated",
+  name: "Downtown Pizza",
+  location: "Riverside, CA",
+  website: "https://downtownpizza.example",
+  scanStatus: "complete",
+  outreachStatus: "pending|sent|suppressed",
+  lastContacted: Timestamp,
+  tags: ["pizza", "restaurant", "local"],
+  createdAt: Timestamp,
+  updatedAt: Timestamp
+}
+```
+
+#### `messages` Collection
+```javascript
+{
+  id: "auto-generated",
+  from: "agent|user|ai",
+  to: "lead|user|agent",
+  type: "outreach|audit|info|reminder",
+  content: "...",
+  status: "sent|pending|failed|suppressed",
+  createdAt: Timestamp
+}
+```
+
+#### `automations` Collection
+```javascript
+{
+  id: "auto-generated",
+  jobType: "scan|audit|outreach|reminder",
+  schedule: "0 8 * * *", // cron format
+  status: "active|paused|completed|failed",
+  lastRun: Timestamp,
+  nextRun: Timestamp,
+  config: { ... },
+  suppression: ["leadId", "domain"],
+  createdAt: Timestamp,
+  updatedAt: Timestamp
+}
+```
+
+#### `events` Collection
+```javascript
+{
+  id: "auto-generated",
+  type: "scan|audit|outreach|reminder",
+  refId: "leadId|auditId|automationId",
+  status: "started|completed|failed|suppressed",
+  details: "...",
+  createdAt: Timestamp
+}
+```
 ```javascript
 {
   id: "uuid",
@@ -490,12 +558,53 @@ Response:
 
 ## API Design
 
-### REST API Endpoints
+### REST API Endpoints (Current & v2)
 
-#### Authentication & Health
+All endpoints are served by Express on Cloud Run and exposed to the SPA through Firebase Hosting rewrites under the /api prefix.
+
+#### Health & Stats
 ```
-GET  /health                    # Server health check
-GET  /                          # Server info
+GET   /api/health               # Basic health
+GET   /api/stats                # Server stats (provider, model, queue, knowledgeCount)
+GET   /api/features             # Feature list
+GET   /api/ai/providers         # Available AI providers (stub)
+```
+
+#### AI Core
+```
+POST  /api/ai/chat              # Natural chat
+POST  /api/ai/assistant         # Companion-style assistant
+POST  /api/ai/generate          # Generator stub
+POST  /api/ai/image             # Image stub (placeholder URLs)
+```
+
+#### Advanced Features
+```
+POST  /api/features/seo-analysis
+POST  /api/features/social-content
+POST  /api/features/competitor-analysis
+POST  /api/features/content-calendar
+```
+
+#### Audits & Reports
+```
+POST  /api/audit/start
+POST  /api/report/generate
+```
+
+#### Knowledge
+```
+GET   /api/knowledge            # Count
+POST  /api/knowledge/add        # Add file (admin token)
+POST  /api/knowledge/refresh    # Reload from disk
+```
+
+#### Demo Data
+```
+GET   /api/leads
+POST  /api/ai/sendEmails
+POST  /api/ai/audit
+GET   /api/actions
 ```
 
 #### AI Services
@@ -520,6 +629,15 @@ POST /api/features/assistant          # AI assistant chat
 ```
 
 #### Customer Portal
+
+#### Agent Endpoints (Morrow.AI v2)
+```
+POST  /api/agent/scan        # Scan local businesses, update leads
+POST  /api/agent/audit       # Run audits, log events
+POST  /api/agent/outreach    # Send outreach, update messages/leads
+POST  /api/agent/learn       # Ingest new knowledge/context
+POST  /api/agent/cron        # Trigger scheduled automations (guardrails)
+```
 ```
 POST /api/customer              # Create customer profile
 GET  /api/customer/profile/:id  # Get customer profile
@@ -575,6 +693,17 @@ Content-Type: application/json
 ---
 
 ## User Experience & Interface
+### Branding & Logo
+
+Brand assets are centralized for consistency and easy overrides.
+
+- Frontend branding module: `src/branding.ts`
+  - `appName`: defaults to "SmartLocal USA"; overridable via `VITE_APP_NAME`.
+  - `logoUrl`: defaults to `/assets/logo.png`; overridable via `VITE_LOGO_URL`.
+  - `logoAlt`: derived from `appName`.
+- Usage: `index.tsx` imports from `src/branding.ts` so all headers/logos update automatically.
+- PWA icons: defined in `manifest.json` (can be updated once final 192/512 PNGs are provided).
+
 
 ### Consultant Dashboard Flow
 
@@ -651,6 +780,12 @@ View Dashboard
 - **No passwords**: Reduces attack surface
 
 ### Security Measures
+
+#### Agent Guardrails (Morrow.AI v2)
+- Quiet hours: Suppress automations/outreach during configured time windows
+- Suppression lists: Per-lead, per-domain, per-event
+- Rate limits: Per job, per user, per endpoint
+- Audit logging: All agent actions/events are logged for review
 
 #### Backend Security
 ```javascript
@@ -846,6 +981,79 @@ Code: 482719
 
 ## AI Integration
 
+### Morrow.AI — Autonomous Admin Partner (SMARTLOCAL.AI Integration v2)
+
+Morrow.AI v2 is a fully autonomous admin partner, deeply integrated with SMARTLOCAL.AI. It orchestrates daily business intelligence, outreach, and automation flows, powered by:
+
+- **Firestore Extensions:**
+  - `leads`: Discovered businesses, scan results, outreach status
+  - `messages`: All agent/user/AI communications
+  - `automations`: Scheduled jobs, triggers, suppression windows
+  - `events`: Audit runs, outreach sends, scan completions
+
+- **New API Endpoints:**
+  - `/api/agent/scan` — Scan local businesses via Maps, store in `leads`
+  - `/api/agent/audit` — Run audits, log to `events` and `automations`
+  - `/api/agent/outreach` — Send outreach, update `messages` and `leads`
+  - `/api/agent/learn` — Ingest new knowledge, update context
+  - `/api/agent/cron` — Trigger scheduled automations (quiet hours, suppression, rate limits)
+
+- **Backend Modules:**
+  - `routes/agent.ts`: Express handlers for agent endpoints, with env key guards
+  - `services/maps.ts`: Google Maps business scanner, deduplication, Firestore sync
+  - `services/audit.ts`: Audit logic, report generation, event logging
+  - `services/outreach.ts`: Email/SMS outreach, suppression, rate limiting
+
+- **Scheduler Jobs:**
+  - Daily scans, audits, outreach, and event triggers via cron or Cloud Scheduler
+  - Respect quiet hours, suppression lists, and rate limits
+
+- **Frontend Hooks:**
+  - `MapView`: Triggers agent scans, displays lead status
+  - `AIAssistantView`: Converses with agent, shows automation status, allows manual triggers
+
+- **Guardrails:**
+  - Quiet hours (configurable)
+  - Outreach suppression (per-lead, per-domain)
+  - Rate limits (per job, per user)
+
+- **Persona System Prompt:**
+  - Drop-in prompt for Morrow.AI persona, matching your energy, with context-aware, action-first, and human-friendly responses
+
+This upgrade enables Morrow.AI to act as a true autonomous admin, handling daily business ops, outreach, and intelligence with minimal human intervention, while remaining fully auditable and configurable.
+### Morrow.AI Companion Persona & System Prompt (Live)
+
+The orchestrator (`ai-server/morrow.js`) implements a human-friendly, companion-style assistant with:
+
+- Tone mirroring: infers tone from user input (urgent, high-energy, casual, formal, neutral) and lightly adapts response style.
+- Friendly cues: optional emoji cue per tone, capped to avoid noise, configurable.
+- Graceful ambiguity handling: detects unclear asks and responds calmly with 2–3 actionable next steps instead of stalling.
+- Action-first suggestions: recommends practical follow-ups (audit, SEO analysis, content calendar), prioritized by prompt hints.
+- Lightweight conversation memory: keeps a rolling window of recent turns per conversationId to stay contextually present.
+- Knowledge snippets: searches local knowledge store for quick references and includes file titles as context hints.
+
+
+Config surface:
+- Persona name, vibe, bullets, sign-off, emoji on/off.
+- Drop-in system prompt (see below) for context-aware, action-first, human-friendly responses
+- Provider registry (stubbed) and selection; stats tracking.
+
+**System Prompt Example:**
+```
+You are Morrow.AI, an autonomous admin partner for local business consultants. Your vibe is high-energy, encouraging, and straight-talking. You always:
+- Mirror the user’s energy and tone
+- If unclear, be cool and offer 2–3 concrete next steps
+- Prefer action over theory—always suggest what we can do now
+- Keep it respectful, positive, and confident
+- Respect quiet hours and suppression lists
+- Log all actions for auditability
+```
+
+Endpoints using persona:
+- `POST /api/ai/chat`
+- `POST /api/ai/assistant`
+
+
 ### Multi-Provider Architecture
 
 ```javascript
@@ -984,7 +1192,7 @@ ollama serve
 # Runs on http://localhost:11434
 ```
 
-### Production Deployment
+### Production Deployment (Current)
 
 #### Frontend (Firebase Hosting)
 ```bash
@@ -998,38 +1206,44 @@ firebase deploy --only hosting
 firebase hosting:channel:deploy production
 ```
 
-#### Backend Options
+#### Backend (Cloud Run + Hosting rewrites)
+Build and deploy the ai-server container with Google Cloud Build, then route `/api/**` from Hosting to Cloud Run.
 
-**Option 1: VPS/Cloud Server**
-```bash
-# Install Node.js
-# Clone repo
-# Install dependencies
-npm install --production
-
-# Run with PM2
-pm2 start server.js --name smartlocal-ai-backend
-pm2 startup
-pm2 save
-```
-
-**Option 2: Firebase Functions**
-```javascript
-// functions/src/index.ts
-export const api = onRequest((request, response) => {
-  return app(request, response);
-});
-```
-
-**Option 3: Docker Container**
+Container:
 ```dockerfile
-FROM node:18-alpine
+FROM node:18-slim
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY . .
-EXPOSE 3001
+COPY package.json ./
+RUN npm install --production
+COPY server.js ./
+COPY morrow.js ./
+EXPOSE 8080
 CMD ["node", "server.js"]
+```
+
+Routing (firebase.json):
+```json
+{
+  "hosting": [
+    {
+      "site": "smartlocalai-b092a",
+      "public": "dist",
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": { "serviceId": "morrow-ai-server", "region": "us-central1" }
+        },
+        { "source": "**", "destination": "/index.html" }
+      ]
+    }
+  ]
+}
+```
+
+Verification:
+```bash
+curl -s https://<hosting-domain>/api/health
+curl -s -X POST https://<hosting-domain>/api/ai/assistant -H 'Content-Type: application/json' -d '{"prompt":"hello"}'
 ```
 
 ### Environment Configuration
@@ -1247,6 +1461,16 @@ This section summarizes concrete implementation work completed during October 20
 - Consider upgrading to Vite 6 to enable the basic-ssl plugin for HTTPS dev.
 - Document Firestore security rules and admin allowlist setup in README.
 - Expand unit tests for map debounce, marker lifecycle, and auth header injection.
+
+### Morrow.AI Persona & API Integration (October 2025)
+- Implemented companion-style persona with tone mirroring, ambiguity detection, action-first suggestions, and light conversation memory.
+- Exposed persona via `/api/ai/chat` and `/api/ai/assistant` endpoints.
+- Fixed knowledge logging timing to avoid interfering with stats updates.
+
+### Hosting ↔ Cloud Run Integration
+- Firebase Hosting rewrites all `/api/**` requests to the Cloud Run service (us-central1).
+- CSP updated to allow `connect-src` to `https://*.run.app` to support API calls.
+- Frontend `ai-service.ts` defaults to same-origin base URL to prevent localhost calls in production.
 
 ## Technical Specifications
 
