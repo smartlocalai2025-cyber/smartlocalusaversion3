@@ -39,6 +39,16 @@ User prompt → OpenAI decides → MorrowAI validates & executes tools → OpenA
 
 ## Setup
 
+### Identity and Voice
+
+In brain mode, the model must always present itself as Morrow.AI and avoid mentioning underlying providers or model names. We enforce this in the system prompt, but you should avoid prompts that explicitly ask the model to reveal provider internals unless you want a technical explanation.
+
+Style guidance applied automatically:
+- Concise by default, minimal repetition
+- At most 2 emojis unless the user prefers more; none in formal tone
+- Ask one focused clarifying question when the user’s intent is ambiguous
+
+
 ### 1. Add OpenAI API key
 
 Create or update `.env.local` in the root directory:
@@ -211,3 +221,34 @@ Brain mode uses function calling, which costs:
 - Knowledge base searches and simple queries: < $0.001
 
 Monitor costs via the `tool_trace` and response usage stats.
+
+---
+
+## 📖 Training the Brain with Your Knowledge (RAG)
+
+You can "train" the system by grounding it in your own docs via Retrieval-Augmented Generation (RAG). No fine-tuning required.
+
+### 1) Add content to the knowledge base
+Place `.md`, `.txt`, or `.json` files in `ai-server/knowledge/`.
+
+### 2) Build embeddings (one-time or after updates)
+```bash
+cd ai-server
+OPENAI_API_KEY=sk-proj-your-key npm run embed:kb
+```
+
+This creates `ai-server/knowledge/embeddings.json` with chunked vectors.
+
+### 3) Use semantic search tool in brain mode
+The brain can call `search_vector_kb` to retrieve semantically relevant chunks.
+
+Example prompt:
+```
+"Search our knowledge base for local SEO best practices and summarize the top 5 recommendations."
+```
+
+### Notes
+- Embedding model: `text-embedding-3-small` (configurable via `OPENAI_EMBEDDING_MODEL`)
+- Store location: `ai-server/knowledge/embeddings.json`
+- Privacy: Your content stays in your environment; only vector embeddings and queries are sent to OpenAI
+

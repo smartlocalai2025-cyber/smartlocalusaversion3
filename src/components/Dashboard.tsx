@@ -9,6 +9,11 @@ const Dashboard: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
+  // Brain chat state
+  const [brainInput, setBrainInput] = useState<string>('');
+  const [brainBusy, setBrainBusy] = useState<boolean>(false);
+  const [brainAnswer, setBrainAnswer] = useState<string>('');
+  const [brainTraceCount, setBrainTraceCount] = useState<number>(0);
 
   useEffect(() => {
     const load = async () => {
@@ -83,6 +88,55 @@ const Dashboard: React.FC = () => {
             />
           </label>
         </div>
+      </section>
+      <section>
+        <h2>Talk to Morrow (Brain Mode)</h2>
+        <p style={{ marginTop: 4 }}>
+          This uses the provider you select above. Choose <strong>openai</strong> to have OpenAI orchestrate tools and reply.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
+          <input
+            type="text"
+            value={brainInput}
+            onChange={(e) => setBrainInput(e.target.value)}
+            placeholder={provider === 'openai' ? 'Ask anything. Tools will be used as needed…' : 'Select openai above if you want OpenAI to respond'}
+            style={{ flex: 1, padding: '8px' }}
+            aria-label="Brain prompt"
+          />
+          <button
+            onClick={async () => {
+              setBrainBusy(true); setBrainAnswer(''); setError(''); setBrainTraceCount(0);
+              try {
+                const res: any = await (localAI as any).brain(
+                  brainInput,
+                  undefined,
+                  provider as any,
+                  model || undefined
+                );
+                setBrainAnswer(res?.final_text || '');
+                setBrainTraceCount(Array.isArray(res?.tool_trace) ? res.tool_trace.length : 0);
+              } catch (e: any) {
+                setError(e?.message || 'Brain request failed');
+              } finally {
+                setBrainBusy(false);
+              }
+            }}
+            disabled={brainBusy || !brainInput.trim()}
+          >
+            {brainBusy ? 'Thinking…' : 'Ask'}
+          </button>
+        </div>
+        {(brainAnswer || error) && (
+          <div style={{ marginTop: 12 }}>
+            {brainAnswer && (
+              <div>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{brainAnswer}</div>
+                <div style={{ marginTop: 6, color: '#666' }}>Tools used: {brainTraceCount}</div>
+              </div>
+            )}
+            {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
+          </div>
+        )}
       </section>
       <section>
         <h2>Audit Status</h2>

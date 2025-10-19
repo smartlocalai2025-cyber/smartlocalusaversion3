@@ -19,6 +19,23 @@ class ToolRegistry {
 
   _buildTools() {
     return {
+      search_vector_kb: {
+        name: 'search_vector_kb',
+        description: 'Semantic search over the knowledge base using vector embeddings',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Natural language search query' },
+            k: { type: 'number', description: 'Number of results to return', default: 5 }
+          },
+          required: ['query']
+        },
+        handler: async (args) => {
+          const { queryStore } = require('../embeddings');
+          const out = await queryStore(args.query, args.k || 5);
+          return out;
+        }
+      },
       search_knowledge: {
         name: 'search_knowledge',
         description: 'Search the internal knowledge base for relevant information using keywords or topics',
