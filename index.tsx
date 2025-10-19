@@ -21,6 +21,10 @@ interface Business {
     website?: string;
     address?: string;
     websiteContent?: any;
+    location?: string;
+    industry?: string;
+    notes?: string;
+    placesData?: any;
 }
 
 interface Profile extends Business {
@@ -529,7 +533,8 @@ const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientI
                     website: websiteUrl,
                     location,
                     industry,
-                    websiteContent: business?.websiteContent
+                    websiteContent: business?.websiteContent,
+                    placesData: (business as any)?.placesData
                 });
                 setReport(result.analysis || result.text || 'No analysis generated');
             } else {
@@ -572,6 +577,26 @@ const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientI
             setIsSaving(false);
         }
     };
+
+    // Auto-save once a report is generated and a profile id is available
+    useEffect(() => {
+        const canAutoSave = Boolean(report && business?.id && !isSaving && !saveSuccess);
+        if (!canAutoSave) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                setIsSaving(true);
+                await onSaveAudit(report, business!.id!);
+                if (!cancelled) setSaveSuccess(true);
+            } catch (err) {
+                console.error('Auto-save failed:', err);
+                if (!cancelled) setError('Failed to auto-save the report. You can try saving manually.');
+            } finally {
+                if (!cancelled) setIsSaving(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [report, business, isSaving, saveSuccess, onSaveAudit]);
 
     return (
         <div className="view-container">
@@ -1555,8 +1580,28 @@ const App: FC = () => {
         }
     }, []);
 
-    const handleStartAudit = (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string }) => {
-        setAuditTarget(business as Business);
+    const handleStartAudit = async (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string; placesData?: any }) => {
+        // Ensure profile exists or create it automatically
+        try {
+            if (user && db) {
+                const docRef = await addDoc(collection(db, 'clients'), {
+                    name: business.name,
+                    website: business.website || '',
+                    notes: business.notes || '',
+                    location: business.location || '',
+                    industry: business.industry || '',
+                    placesData: business.placesData || null,
+                    createdAt: new Date(),
+                    consultant_uid: user.uid,
+                });
+                setAuditTarget({ ...business, id: docRef.id } as Business);
+            } else {
+                setAuditTarget(business as Business);
+            }
+        } catch (e) {
+            console.error('Failed to create profile automatically:', e);
+            setAuditTarget(business as Business);
+        }
         setView('AUDIT');
     };
 

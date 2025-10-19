@@ -422,13 +422,19 @@ class MorrowAI {
     return this._simulateWork(async () => ({ images: [`https://placehold.co/1024x576?text=${encodeURIComponent(prompt || 'Morrow.AI')}`] }), { type: 'image', prompt });
   }
 
-  async seoAnalysis({ businessName, website, location, industry, websiteContent }) {
+  async seoAnalysis({ businessName, website, location, industry, websiteContent, placesData }) {
     const signals = [];
     if (websiteContent) {
       const picks = [...new Set([...(websiteContent.h1||[]).slice(0,2), ...(websiteContent.h2||[]).slice(0,2), websiteContent.description || ''].filter(Boolean))].slice(0,4);
       if (picks.length) signals.push(`• ${picks.join('\n• ')}`);
     }
     const title = `SEO Analysis: ${businessName}${website?` (${website})`:''}${location?` — ${location}`:''}${industry?` [${industry}]`:''}`;
+    const placeBits = placesData ? [
+      placesData.rating ? `Rating: ${placesData.rating} (${placesData.user_ratings_total} reviews)` : null,
+      placesData.business_status ? `Status: ${placesData.business_status}` : null,
+      placesData.price_level !== undefined ? `Price Level: ${placesData.price_level}` : null,
+      placesData.formatted_phone_number ? `Phone: ${placesData.formatted_phone_number}` : null,
+    ].filter(Boolean).map(s=>`• ${s}`).join('\n') : '';
     const summary = [
       '• Snapshot of local presence and quick wins',
       '• Prioritized actions to move the needle fast',
@@ -460,9 +466,13 @@ class MorrowAI {
       '## Findings',
       findings,
       '',
-      '## Website Signals',
+  '## Website Signals',
       signals.length ? signals.join('\n') : '• Not enough site signals detected; we can fetch more details if you share a URL.',
       '',
+  placesData ? '## Google Place Details\n' + (placeBits || '• No summary available') + '\n' : '',
+  placesData && placesData.opening_hours?.weekday_text ? '### Hours\n' + placesData.opening_hours.weekday_text.map((d)=>`• ${d}`).join('\n') + '\n' : '',
+  placesData && Array.isArray(placesData.reviews) && placesData.reviews.length ? '### Recent Reviews\n' + placesData.reviews.map((r)=>`• (${r.rating}/5) ${r.text || ''} — ${r.author_name || ''}`).slice(0,3).join('\n') + '\n' : '',
+  '',
       '## Top Actions',
       actions,
       '',
@@ -494,12 +504,12 @@ class MorrowAI {
     return this._simulateWork(async () => ({ calendar: text, provider: this.name }), { type: 'contentCalendar', businessName, industry, timeframe, platforms });
   }
 
-  async startAudit({ businessName, website, scope = [], websiteContent }) {
+  async startAudit({ businessName, website, scope = [], websiteContent, placesData }) {
     const contentHint = websiteContent?.title || websiteContent?.description;
     return this._simulateWork(async () => ({
-      report: `Started audit for ${businessName}${website?` (${website})`:''}. Scope: ${scope.join(', ') || 'standard local SEO'}. ${contentHint?`Initial site signal: ${contentHint}`:''}`,
+      report: `Started audit for ${businessName}${website?` (${website})`:''}. Scope: ${scope.join(', ') || 'standard local SEO'}. ${contentHint?`Initial site signal: ${contentHint}`:''}${placesData?.rating?` | Google Rating: ${placesData.rating} (${placesData.user_ratings_total||0})`:''}`,
       provider: this.name,
-    }), { type: 'startAudit', businessName, website, scope, websiteContent });
+    }), { type: 'startAudit', businessName, website, scope, websiteContent, placesData });
   }
 
   async generateReport({ auditId, format = 'markdown' }) {

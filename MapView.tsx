@@ -84,7 +84,7 @@ declare namespace google.maps {
 
 // --- Component Props ---
 interface MapViewProps {
-    onStartAudit: (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string }) => void;
+    onStartAudit: (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string; placesData?: any }) => void;
 }
 
 // --- Constants ---
@@ -129,6 +129,27 @@ const MapError: FC<{ message: string }> = ({ message }) => (
     </div>
 );
 
+// Serialize only safe fields from Places Details result (module scope)
+function sanitizePlaces(detail: any) {
+    if (!detail || typeof detail !== 'object') return null;
+    try {
+        const pick = (obj: any, keys: string[]) => keys.reduce((acc: any, k) => {
+            if (obj && typeof obj[k] !== 'undefined') acc[k] = obj[k];
+            return acc;
+        }, {});
+        const basic = pick(detail, [
+            'place_id','name','url','website','vicinity','formatted_address','types','business_status','price_level','rating','user_ratings_total','utc_offset_minutes'
+        ]);
+        const phones = pick(detail, ['formatted_phone_number','international_phone_number']);
+        const opening = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods']) : undefined;
+        const addr = Array.isArray(detail.address_components) ? detail.address_components.map((c:any)=>({ long_name:c.long_name, short_name:c.short_name, types:c.types })) : undefined;
+        const photos = Array.isArray(detail.photos) ? detail.photos.slice(0,5).map((p:any)=>({ height:p.height, width:p.width, html_attributions:p.html_attributions })) : undefined;
+        const reviews = Array.isArray(detail.reviews) ? detail.reviews.slice(0,5).map((r:any)=>({ author_name:r.author_name, rating:r.rating, relative_time_description:r.relative_time_description, text:r.text })) : undefined;
+        const editorial = detail.editorial_summary ? pick(detail.editorial_summary, ['overview']) : undefined;
+        return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial };
+    } catch { return null; }
+}
+
 
 // --- Main Map View Component ---
 export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
@@ -141,7 +162,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const [statusMsg, setStatusMsg] = useState<string>("");
     const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
     const [toast, setToast] = useState<{message: string; action?: () => void} | null>(null);
-    const [pendingBusiness, setPendingBusiness] = useState<{ name: string; website?: string; address?: string } | null>(null);
+    const [pendingBusiness, setPendingBusiness] = useState<{ name: string; website?: string; address?: string; placesData?: any } | null>(null);
     const [showCreateProfile, setShowCreateProfile] = useState(false);
     const [extraDetails, setExtraDetails] = useState<{ website?: string; location?: string; industry?: string; notes?: string }>({});
     const [intel, setIntel] = useState<any>(null);
@@ -425,6 +446,27 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             }
         });
     };
+
+    // Serialize only safe fields from Places Details result
+    function sanitizePlaces(detail: any) {
+        if (!detail || typeof detail !== 'object') return null;
+        try {
+            const pick = (obj: any, keys: string[]) => keys.reduce((acc: any, k) => {
+                if (obj && typeof obj[k] !== 'undefined') acc[k] = obj[k];
+                return acc;
+            }, {});
+            const basic = pick(detail, [
+                'place_id','name','url','website','vicinity','formatted_address','types','business_status','price_level','rating','user_ratings_total','utc_offset_minutes'
+            ]);
+            const phones = pick(detail, ['formatted_phone_number','international_phone_number']);
+            const opening = detail.opening_hours ? pick(detail.opening_hours, ['weekday_text','isOpen','periods']) : undefined;
+            const addr = Array.isArray(detail.address_components) ? detail.address_components.map((c:any)=>({ long_name:c.long_name, short_name:c.short_name, types:c.types })) : undefined;
+            const photos = Array.isArray(detail.photos) ? detail.photos.slice(0,5).map((p:any)=>({ height:p.height, width:p.width, html_attributions:p.html_attributions })) : undefined;
+            const reviews = Array.isArray(detail.reviews) ? detail.reviews.slice(0,5).map((r:any)=>({ author_name:r.author_name, rating:r.rating, relative_time_description:r.relative_time_description, text:r.text })) : undefined;
+            const editorial = detail.editorial_summary ? pick(detail.editorial_summary, ['overview']) : undefined;
+            return { ...basic, ...phones, opening_hours: opening, address_components: addr, photos, reviews, editorial_summary: editorial };
+        } catch { return null; }
+    }
     // Expose to ref for use in Update button
     showBusinessesInBoundsRef.current = showBusinessesInBounds;
 
@@ -610,7 +652,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                 const encodedName = encodeURIComponent(place.name!);
                 const fallbackWebsite = encodeURIComponent(place.website || '');
 
-                const setInfo = (websiteValue: string) => {
+                                const setInfo = (websiteValue: string) => {
                     const content = `
                         <div class="map-infowindow-content">
                             <h4>${place.name}</h4>
@@ -626,19 +668,43 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
 
                 // If we have a place_id, fetch details to get website
                 if (placesService.current && place.place_id) {
-                    placesService.current.getDetails({ placeId: place.place_id, fields: ['website','name','formatted_address','geometry'] }, (detail, status) => {
-                        if (status === google.maps.places.PlacesServiceStatus.OK && detail) {
-                            setInfo(detail.website || decodeURIComponent(fallbackWebsite));
-                            // Store pending business for wizard flow
-                            setPendingBusiness({ name: place.name!, website: detail.website || undefined, address: place.formatted_address || '' });
-                        } else {
-                            setInfo(decodeURIComponent(fallbackWebsite));
-                            setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
-                        }
-                    });
+                                        const fields = [
+                                            'place_id','name','url','website','vicinity','formatted_address','address_components','geometry','types',
+                                            'formatted_phone_number','international_phone_number','opening_hours','utc_offset_minutes','business_status',
+                                            'price_level','rating','user_ratings_total','reviews','photos','editorial_summary'
+                                        ];
+                                        const fetchDetails = (attempt = 1) => {
+                                            try {
+                                                placesService.current!.getDetails({ placeId: place.place_id!, fields }, (detail, status) => {
+                                                    if (status === google.maps.places.PlacesServiceStatus.OK && detail) {
+                                                        const w = (detail as any).website || decodeURIComponent(fallbackWebsite);
+                                                        setInfo(w);
+                                                        setPendingBusiness({
+                                                            name: place.name!,
+                                                            website: (detail as any).website || undefined,
+                                                            address: (detail as any).formatted_address || '',
+                                                            placesData: sanitizePlaces(detail)
+                                                        });
+                                                    } else if (attempt < 3) {
+                                                        // Retry with smaller field set to avoid quota/field issues
+                                                        setTimeout(() => fetchDetails(attempt + 1), attempt * 300);
+                                                    } else {
+                                                        setInfo(decodeURIComponent(fallbackWebsite));
+                                                        setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
+                                                    }
+                                                });
+                                            } catch {
+                                                if (attempt < 3) setTimeout(() => fetchDetails(attempt + 1), attempt * 300);
+                                                else {
+                                                    setInfo(decodeURIComponent(fallbackWebsite));
+                                                    setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
+                                                }
+                                            }
+                                        };
+                                        fetchDetails();
                 } else {
                     setInfo(decodeURIComponent(fallbackWebsite));
-                    setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
+                                        setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
                 }
             });
             
@@ -804,7 +870,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                                             websiteContent: intelData,
                                             notes: extraDetails.notes,
                                             location: extraDetails.location,
-                                            industry: extraDetails.industry
+                                            industry: extraDetails.industry,
+                                            placesData: pendingBusiness.placesData
                                         });
                                         setPendingBusiness(null);
                                     } catch (e:any) {

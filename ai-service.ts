@@ -297,6 +297,7 @@ class LocalAIService {
     location?: string;
     industry?: string;
     websiteContent?: any;
+    placesData?: any;
   }, options: AIServiceOptions = {}): Promise<AIResponse> {
     return this.request('/api/features/seo-analysis', businessData, options);
   }
@@ -319,6 +320,7 @@ class LocalAIService {
     scope?: string[];
     notes?: string;
     websiteContent?: any;
+    placesData?: any;
   } = {}, options: AIServiceOptions = {}): Promise<AIResponse> {
     return this.request('/api/audit/start', payload, options);
   }
