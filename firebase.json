@@ -47,7 +47,7 @@
       {
         "source": "/api/**",
         "run": {
-          "serviceId": "smart-local-ai",
+          "serviceId": "morrow-ai-server",
           "region": "us-central1"
         }
       },
