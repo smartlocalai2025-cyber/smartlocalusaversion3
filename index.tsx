@@ -2,7 +2,7 @@ import React, { useState, useEffect, type FC, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
-import { StatusIndicator } from './components/StatusIndicator';
+import { StatusIndicator } from './src/components/StatusIndicator';
 import { auth, signInWithGoogle, signOut, type User, firebaseError, db, collection, addDoc, query, where, orderBy, getDocs, functions, httpsCallable } from './firebase';
 import { MapView } from './MapView';
 import { localAI, type AIResponse } from './ai-service';
