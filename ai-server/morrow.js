@@ -108,16 +108,15 @@ class MorrowAI {
     try {
       this.queue.push(start);
       const result = await fn();
-      // If logKnowledge is provided, log the call to knowledge store
-      if (logKnowledge) {
-        this._logKnowledgeCall(logKnowledge);
-      }
       return result;
     } finally {
       const duration = Date.now() - start;
       this._updateStats(duration);
       this.queue.shift();
     }
+      if (logKnowledge) {
+        this._logKnowledgeCall(logKnowledge);
+      }
   }
 
   async chat({ prompt, conversationId }) {
