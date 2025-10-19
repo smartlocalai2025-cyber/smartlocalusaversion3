@@ -1,14 +1,24 @@
 
 console.log('Starting Morrow.AI Express server...');
 const express = require('express');
+const cors = require('cors');
 const { MorrowAI } = require('./morrow');
 const app = express();
 const cheerio = require('cheerio');
+const fsPromises = require('fs').promises;
+const net = require('net');
 // Simple async handler to catch rejected promises in Express 4
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 app.use(express.json());
+// Allow cross-origin requests in case frontend is on a different origin (dev/proxy or separate host)
+app.use(cors());
 const morrow = new MorrowAI();
 const ADMIN_TOKEN = process.env.MORROW_ADMIN_TOKEN || 'localdev';
+// Enforce secure admin token in non-development environments
+if (process.env.NODE_ENV === 'production' && ADMIN_TOKEN === 'localdev') {
+  console.error('SECURITY: MORROW_ADMIN_TOKEN must be set in production!');
+  process.exit(1);
+}
 
 // Add knowledge file (admin only, basic)
 app.post('/api/knowledge/add', asyncHandler(async (req, res) => {
@@ -18,7 +28,7 @@ app.post('/api/knowledge/add', asyncHandler(async (req, res) => {
   if (!filename || !content) return res.status(400).json({ ok: false, error: 'Missing filename or content' });
   const safeName = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const fullPath = require('path').join(morrow.knowledgeDir, safeName);
-  require('fs').writeFileSync(fullPath, content, 'utf8');
+  await fsPromises.writeFile(fullPath, content, 'utf8');
   morrow._loadKnowledge();
   res.json({ ok: true, filename: safeName, count: morrow.getStats().knowledgeCount });
 }));
@@ -78,13 +88,49 @@ const handleWebsiteIntel = async (req, res) => {
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: 'Valid url is required (http/https)' });
   }
+  // Basic SSRF protections: block localhost/private networks/metadata IPs
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local');
+    const isIp = net.isIP(host) !== 0;
+    let isPrivate = false;
+    if (isIp) {
+      if (host.includes(':')) {
+        // IPv6 simple checks
+        isPrivate = host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd');
+      } else {
+        const parts = host.split('.').map(n => parseInt(n, 10));
+        const [a,b] = parts;
+        isPrivate = (
+          a === 10 ||
+          (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && b === 168) ||
+          a === 127 ||
+          (a === 169 && b === 254) ||
+          a === 0
+        );
+      }
+    }
+    if (isLocalHost || isPrivate) {
+      return res.status(400).json({ error: 'Blocked host. Only public websites are allowed.' });
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'MorrowAI/1.0 (+https://smartlocal.ai)' } });
+    // Use global fetch if available (Node 18+), otherwise dynamically import node-fetch
+    const fetcher = typeof fetch === 'function' ? fetch : (await import('node-fetch')).default;
+    const resp = await fetcher(url, { signal: controller.signal, headers: { 'User-Agent': 'MorrowAI/1.0 (+https://smartlocal.ai)', 'Accept': 'text/html,application/xhtml+xml' } });
     clearTimeout(timeout);
     if (!resp.ok) {
       return res.status(502).json({ error: `Upstream HTTP ${resp.status}` });
+    }
+    const ct = (resp.headers.get && resp.headers.get('content-type')) || '';
+    if (ct && !ct.includes('text/html')) {
+      return res.status(415).json({ error: `Unsupported content-type: ${ct}` });
     }
     const html = await resp.text();
     const $ = cheerio.load(html);
@@ -129,7 +175,11 @@ app.get('/api/actions', asyncHandler(async (req, res) => res.json(await morrow.a
 // Global error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('Unhandled error:', err);
+  } else {
+    console.error('Unhandled error:', err?.message || err);
+  }
   const status = err?.status || 500;
   res.status(status).json({ error: err?.message || 'Internal Server Error' });
 });
