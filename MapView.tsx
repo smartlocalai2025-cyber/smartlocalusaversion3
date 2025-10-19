@@ -131,6 +131,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const [isHistoryVisible, setHistoryVisible] = useState(false);
     const [locationPermission, setLocationPermission] = useState<'pending'|'granted'|'denied'>('pending');
     const [statusMsg, setStatusMsg] = useState<string>("");
+    const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -226,19 +227,20 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
 
 
     useEffect(() => {
-        if (isApiReady) return;
-        // Ask for location permission first
+        // Always request geolocation on mount
         if (locationPermission === 'pending') {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     () => setLocationPermission('granted'),
-                    () => setLocationPermission('denied')
+                    () => setLocationPermission('denied'),
+                    { enableHighAccuracy: true }
                 );
             } else {
                 setLocationPermission('denied');
             }
-            return;
+            // Don't return; let map load continue
         }
+        if (isApiReady) return;
         // API key check
         if (!MAPS_API_KEY) {
             setError("Google Maps API key is missing. Please set VITE_GOOGLE_MAPS_API_KEY in your environment.");
@@ -254,17 +256,18 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         loader.load()
             .then(google => {
                 setIsApiReady(true);
-                if (locationPermission === 'granted' && navigator.geolocation) {
+                if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            initMap(google, position.coords.latitude, position.coords.longitude);
+                            initMap(google, position.coords.latitude, position.coords.longitude, true);
                         },
                         () => {
-                            initMap(google);
-                        }
+                            initMap(google, undefined, undefined, false);
+                        },
+                        { enableHighAccuracy: true }
                     );
                 } else {
-                    initMap(google);
+                    initMap(google, undefined, undefined, false);
                 }
             })
             .catch(e => {
@@ -295,7 +298,9 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     };
 
 
-    const initMap = (google: typeof window.google, lat?: number, lng?: number) => {
+    // Only trigger business search once after centering on user location
+    const hasLoadedBusinesses = useRef(false);
+    const initMap = (google: typeof window.google, lat?: number, lng?: number, useLocation?: boolean) => {
         if (!mapRef.current || !searchInputRef.current) return;
 
         const center = lat && lng ? { lat, lng } : { lat: 34.0522, lng: -118.2437 };
@@ -307,22 +312,31 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         placesService.current = new google.maps.places.PlacesService(mapInstance.current);
         infoWindow.current = new google.maps.InfoWindow();
 
-
-        // Show all businesses in the current map bounds on map load
-        showBusinessesInBounds();
-
-
-        // Debounce idle event to avoid excessive API calls
-        let idleTimeout: NodeJS.Timeout | null = null;
-        // @ts-ignore
-        window.google.maps.event.addListener(mapInstance.current, 'idle', () => {
-            if (idleTimeout) clearTimeout(idleTimeout);
-            idleTimeout = setTimeout(() => {
+        // Only show businesses once after initial center
+        hasLoadedBusinesses.current = false;
+        const showOnce = () => {
+            if (!hasLoadedBusinesses.current) {
                 showBusinessesInBounds();
-            }, 500); // 500ms debounce
-        });
+                hasLoadedBusinesses.current = true;
+            }
+        };
+        if (useLocation) {
+            showOnce();
+        } else {
+            // If not using geolocation, show businesses after map is ready
+            setTimeout(showOnce, 500);
+        }
 
-        function showBusinessesInBounds(centerOverride?: any) {
+        // Listen for map drag/zoom to show update prompt
+        listeners.current.push(
+            (window as any).google.maps.event.addListener(mapInstance.current, 'idle', () => {
+                if (hasLoadedBusinesses.current) {
+                    setShowUpdatePrompt(true);
+                }
+            })
+        );
+
+    function showBusinessesInBounds(centerOverride?: any) {
             if (!mapInstance.current || !placesService.current) return;
             setLoading(true);
             // Clear old markers before adding new ones
@@ -365,7 +379,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         // Allow the user to CLICK on map to "pick" a location
         // @ts-ignore: event typings are simplified here
         listeners.current.push(
-            window.google.maps.event.addListener(mapInstance.current, 'click', (e: any) => {
+            (window as any).google.maps.event.addListener(mapInstance.current, 'click', (e: any) => {
             const loc = e?.latLng;
             if (!loc) return;
             // Center/zoom the map to the clicked location
@@ -392,6 +406,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             });
             // Load nearby businesses around the chosen point
             showBusinessesInBounds(loc);
+            hasLoadedBusinesses.current = true;
+            setShowUpdatePrompt(false);
     })
     );
 
@@ -616,7 +632,48 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     </div>
                 )}
             </div>
-            <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
+            <div style={{ position: 'relative' }}>
+                <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
+                {showUpdatePrompt && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 16,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 10,
+                        background: 'rgba(255,255,255,0.95)',
+                        borderRadius: 8,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        padding: '12px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12
+                    }}>
+                        <span>Update map to show new businesses?</span>
+                        <button
+                            onClick={() => {
+                                if (mapInstance.current) {
+                                    // @ts-ignore
+                                    showBusinessesInBounds();
+                                    setShowUpdatePrompt(false);
+                                }
+                            }}
+                            style={{
+                                background: '#1976d2',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: 4,
+                                padding: '6px 16px',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                            }}
+                            aria-label="Update map to show new businesses"
+                        >
+                            Update
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
