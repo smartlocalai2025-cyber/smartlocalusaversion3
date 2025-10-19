@@ -14,14 +14,12 @@ app.use(express.json());
 app.use(cors());
 const morrow = new MorrowAI();
 const ADMIN_TOKEN = process.env.MORROW_ADMIN_TOKEN || 'localdev';
-// Enforce secure admin token in non-development environments
-if (process.env.NODE_ENV === 'production' && ADMIN_TOKEN === 'localdev') {
-  console.error('SECURITY: MORROW_ADMIN_TOKEN must be set in production!');
-  process.exit(1);
-}
+const IS_PROD = process.env.NODE_ENV === 'production';
+const ADMIN_ENABLED = !(IS_PROD && ADMIN_TOKEN === 'localdev');
 
 // Add knowledge file (admin only, basic)
 app.post('/api/knowledge/add', asyncHandler(async (req, res) => {
+  if (!ADMIN_ENABLED) return res.status(403).json({ ok: false, error: 'Admin actions disabled: set MORROW_ADMIN_TOKEN' });
   const token = req.headers['x-admin-token'] || req.query.token;
   if (token !== ADMIN_TOKEN) return res.status(403).json({ ok: false, error: 'Forbidden' });
   const { filename, content } = req.body || {};
