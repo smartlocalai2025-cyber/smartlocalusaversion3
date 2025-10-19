@@ -35,7 +35,8 @@ interface Audit {
 
 
 // --- Logo ---
-const logoUrl = '/assets/logo.png'; // Vite serves from public, so this is correct
+// Served from Vite public/ folder
+const logoUrl = '/assets/logo.svg';
 
 // --- Header Component ---
 const Header: FC<{ user: User | null }> = ({ user }) => {
@@ -126,7 +127,7 @@ const HealthBadge: FC = () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 4000);
         try {
-            const resp = await fetch('/health', { signal: controller.signal });
+            const resp = await fetch('/api/health', { signal: controller.signal });
             clearTimeout(timeout);
             const ms = Math.round(performance.now() - start);
             setLatency(ms);
