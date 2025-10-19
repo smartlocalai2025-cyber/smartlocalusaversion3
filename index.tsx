@@ -2,6 +2,7 @@ import React, { useState, useEffect, type FC, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
+import { StatusIndicator } from './components/StatusIndicator';
 import { auth, signInWithGoogle, signOut, type User, firebaseError, db, collection, addDoc, query, where, orderBy, getDocs, functions, httpsCallable } from './firebase';
 import { MapView } from './MapView';
 import { localAI, type AIResponse } from './ai-service';
@@ -35,6 +36,44 @@ interface Audit {
 
 // --- Logo ---
 const logoUrl = '/assets/logo.png'; // Vite serves from public, so this is correct
+
+// --- Header Component ---
+const Header: FC<{ user: User | null }> = ({ user }) => {
+  const [showStats, setShowStats] = useState(false);
+  const isAdmin = user?.email === ADMIN_EMAIL;
+  
+  return (
+    <header className="app-header">
+      <div className="header-left">
+        <img src={logoUrl} alt="SmartLocal Logo" className="logo" />
+      </div>
+      <div className="header-center">
+        <div className="ai-status">
+          <StatusIndicator 
+            showDetails={showStats && isAdmin} 
+            className="header-status"
+          />
+          {isAdmin && (
+            <button 
+              onClick={() => setShowStats(!showStats)}
+              className="stats-toggle"
+              title="Toggle AI Stats"
+            >
+              📊
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="header-right">
+        {user ? (
+          <button onClick={() => signOut()}>Sign Out</button>
+        ) : (
+          <button onClick={() => signInWithGoogle()}>Sign In</button>
+        )}
+      </div>
+    </header>
+  );
+};
 
 // --- AI Service Configuration ---
 let geminiProxy: HttpsCallable<{ action: string; params: any }, { text: string }> | null = null;

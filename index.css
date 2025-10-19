@@ -45,6 +45,62 @@ body {
   padding: 0 20px 40px;
 }
 
+/* Header Styles */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.header-left,
+.header-right {
+  flex: 1;
+}
+
+.header-center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0.5rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.header-status {
+  margin-right: 0.5rem;
+}
+
+.stats-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.stats-toggle:hover {
+  background: var(--border-color);
+}
+
+.logo {
+  height: 40px;
+  width: auto;
+}
+
 /* Grand Logo Animation */
 @keyframes grandGlow {
   0%, 100% {

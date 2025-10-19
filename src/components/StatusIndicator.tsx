@@ -13,6 +13,10 @@ interface ServiceStatus {
   latency: number;
   requestCount: number;
   lastError?: string;
+  queueLength?: number;
+  serverLoad?: number;
+  tokenCount?: number;
+  costEstimate?: number;
 }
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ 
@@ -30,14 +34,18 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const checkHealth = async () => {
     const startTime = Date.now();
     try {
-      const isHealthy = await localAI.checkHealth();
+      const [isHealthy, serverStats] = await Promise.all([
+        localAI.checkHealth(),
+        localAI.getServerStats()
+      ]);
       const latency = Date.now() - startTime;
       
       setStatus(prev => ({
         ...prev,
         isHealthy,
         latency,
-        lastError: undefined
+        lastError: undefined,
+        ...serverStats
       }));
     } catch (error) {
       setStatus(prev => ({
@@ -105,6 +113,30 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
           <span>Requests:</span>
           <span>{status.requestCount}</span>
         </div>
+        {status.queueLength !== undefined && (
+          <div className="status-row">
+            <span>Queue:</span>
+            <span>{status.queueLength} requests</span>
+          </div>
+        )}
+        {status.serverLoad !== undefined && (
+          <div className="status-row">
+            <span>Server Load:</span>
+            <span>{status.serverLoad.toFixed(2)}%</span>
+          </div>
+        )}
+        {status.tokenCount !== undefined && (
+          <div className="status-row">
+            <span>Tokens:</span>
+            <span>{status.tokenCount.toLocaleString()}</span>
+          </div>
+        )}
+        {status.costEstimate !== undefined && (
+          <div className="status-row">
+            <span>Cost:</span>
+            <span>${status.costEstimate.toFixed(2)}</span>
+          </div>
+        )}
         {status.lastError && (
           <div className="status-row error-message">
             <span>Error:</span>

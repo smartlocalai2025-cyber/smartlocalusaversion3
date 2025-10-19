@@ -48,6 +48,12 @@ interface AIServiceStats {
   averageLatency: number;
   lastError?: string;
   lastRequestTime?: number;
+  tokenCount?: number;
+  completionTokens?: number;
+  promptTokens?: number;
+  costEstimate?: number;
+  queueLength?: number;
+  serverLoad?: number;
 }
 
 type StatusCallback = (stats: AIServiceStats) => void;
@@ -312,6 +318,25 @@ class LocalAIService {
       throw new Error(`Failed to get providers: HTTP ${response.status}`);
     }
     return response.json();
+  }
+
+  async getServerStats(): Promise<Partial<AIServiceStats>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/stats`);
+      if (!response.ok) {
+        throw new Error(`Failed to get stats: HTTP ${response.status}`);
+      }
+      const stats = await response.json();
+      return {
+        queueLength: stats.queueLength,
+        serverLoad: stats.systemLoad,
+        tokenCount: stats.totalTokens,
+        costEstimate: stats.costEstimate
+      };
+    } catch (error) {
+      console.warn('Failed to fetch server stats:', error);
+      return {};
+    }
   }
 
   getProvider(): string {
