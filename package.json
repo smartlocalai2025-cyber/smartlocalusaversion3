@@ -20,7 +20,7 @@
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.6",
     "express": "^4.21.2",
-    "firebase": "^10.12.2",
+    "firebase": "^10.14.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4"
