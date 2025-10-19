@@ -73,10 +73,11 @@ class LocalAIService {
 
   constructor() {
     this.baseUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || 'http://localhost:3001';
-    const provider = ((import.meta.env.VITE_DEFAULT_AI_PROVIDER || 'claude') as AIProviderName);
+    const savedProvider = (typeof localStorage !== 'undefined' && localStorage.getItem('ai.provider')) as AIProviderName | null;
+    const provider = (savedProvider || (import.meta.env.VITE_DEFAULT_AI_PROVIDER as AIProviderName) || 'claude') as AIProviderName;
     this.defaultOptions = {
       provider,
-      model: (import.meta.env.VITE_DEFAULT_AI_MODEL as string) || 'claude-3-sonnet-20240229',
+      model: (typeof localStorage !== 'undefined' && localStorage.getItem('ai.model')) || (import.meta.env.VITE_DEFAULT_AI_MODEL as string) || 'claude-3-sonnet-20240229',
     };
     this.rateLimiter = {
       requests: 0,
@@ -396,6 +397,16 @@ class LocalAIService {
 
   getModel(): string {
     return this.defaultOptions.model || 'claude-3-sonnet-20240229';
+  }
+
+  setProvider(provider: AIProviderName) {
+    this.defaultOptions.provider = provider;
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem('ai.provider', provider); } catch {}
+  }
+
+  setModel(model: string) {
+    this.defaultOptions.model = model;
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem('ai.model', model); } catch {}
   }
 
   subscribeToStatus(callback: StatusCallback): () => void {
