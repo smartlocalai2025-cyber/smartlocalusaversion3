@@ -30,6 +30,15 @@ app.get('/api/health', (req, res) => {
 });
 app.get('/api/stats', (req, res) => res.json(morrow.getStats()));
 app.get('/api/features', (req, res) => res.json(morrow.getFeatures()));
+// Providers (stubbed from orchestrator)
+app.get('/api/ai/providers', (req, res) => {
+  try {
+    const providers = Object.keys(morrow.providers || {}).map(k => ({ id: k, ...morrow.providers[k] }));
+    res.json({ providers });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
 
 // Knowledge endpoints
 app.get('/api/knowledge', (req, res) => {
