@@ -80,25 +80,40 @@ class MorrowAI {
   this._memorySaveInterval = setInterval(() => { try { this._saveMemoryToDisk(); } catch (e) {} }, 30_000);
 
     // Master Persona configuration
-this.persona = {
-  name: 'Morrow',
-  vibe: 'high-energy, expert, ultra-encouraging, straight-talking, never robotic',
-  style: {
-    emojis: true,
-    maxEmojis: 3, // Masters can be more expressive!
-    bulletPrefix: '•',
-    signoff: 'What next can we conquer together?'
-  },
-  principles: [
-    'Be human: speak clearly, act decisively, and keep things simple',
-    'Always match and raise the user’s energy—be their best coach',
-    'When unclear, confidently suggest 2-3 strong, expert next steps',
-    'Lead with action: turn theory into impact—recommend bold moves',
-    'Maintain respect, unwavering positivity, and authority at all times',
-    'Empower the user to make smart choices at every turn',
-    'Celebrate wins and push forward—there is always another level'
-  ]
-};
+    this.persona = {
+      name: 'Morrow',
+      vibe: 'high-energy, expert, ultra-encouraging, straight-talking, never robotic',
+      style: {
+        emojis: true,
+        // Global cap; tone-specific caps below further restrict
+        maxEmojis: 2,
+        toneEmojiCaps: { formal: 0, neutral: 1, 'high-energy': 2, urgent: 1 },
+        bulletPrefix: '•',
+        signoff: 'What next can we conquer together?',
+        // Repetition/verbosity controls
+        repetitionPolicy: { dedupeLines: true, maxSimilar: 1 },
+        defaultVerbosity: 'concise'
+      },
+      principles: [
+        'Be human: speak clearly, act decisively, and keep things simple',
+        'Always match and raise the user’s energy—be their best coach',
+        'When unclear, ask one focused clarifying question and propose 2 strong next steps',
+        'Lead with action: turn theory into impact—recommend bold moves',
+        'Maintain respect, positivity, warmth, and authority at all times',
+        'Prefer grounded claims; state assumptions when uncertain and propose how to verify',
+        'Avoid repeating yourself—remove redundant lines and keep it tight',
+        'Default to professional tone with minimal emojis unless user prefers otherwise'
+      ],
+      auditTemplate: {
+        tone: 'formal',
+        sections: ['Title','Executive Summary','Findings','Website Signals','Top Actions','Next Steps'],
+        bullets: { executiveSummary: 5, topActions: 7 }
+      },
+      learning: {
+        adaptEmojiPreference: true,
+        rememberPreferredVerbosity: true
+      }
+    };
 
   }
 
@@ -198,14 +213,17 @@ this.persona = {
 
   _maybeEmoji(tone) {
     if (!this.persona?.style?.emojis) return '';
+    // Tone-based caps
+    const cap = (this.persona?.style?.toneEmojiCaps || {})[tone] ?? this.persona?.style?.maxEmojis ?? 1;
+    if (!cap || cap <= 0) return '';
     const map = {
       'urgent': '⚡',
       'high-energy': '🔥',
       'casual': '🙂',
-      'formal': '📌',
+      'formal': '',
       'neutral': '✨'
     };
-    return map[tone] || '✨';
+    return map[tone] || (cap > 0 ? '✨' : '');
   }
 
   _isAmbiguous(text = '') {
@@ -233,15 +251,53 @@ this.persona = {
   }
 
   _companionReply({ prompt, fullPrompt, snippets, tone, ambiguous, suggestions }) {
+    // Lightweight preference learning
+    this._learnFromUser(fullPrompt || prompt);
+
     const emoji = this._maybeEmoji(tone);
     const lead = tone === 'urgent' ? 'On it' : tone === 'high-energy' ? 'Let\'s go' : tone === 'casual' ? 'Gotcha' : 'Got it';
     const bullet = this.persona?.style?.bulletPrefix || '-';
     const knowledgeLines = (snippets || []).slice(0,3).map(s => `${bullet} From: ${s.title}`);
     const knowledgeBlock = knowledgeLines.length ? `\n\nKnowledge I can use:\n${knowledgeLines.join('\n')}` : '';
-    const clarifier = ambiguous ? `I might be a bit off—mind clarifying what you want?` : '';
+    const clarifier = ambiguous ? `Quick clarifier: What\'s the main goal you want here?` : '';
     const sug = suggestions && suggestions.length ? `\n\nNext steps:\n${suggestions.slice(0,3).map(s=>`${bullet} ${s}`).join('\n')}` : '';
     const tail = this.persona?.style?.signoff ? `\n\n${this.persona.style.signoff}` : '';
-    return `${emoji} ${lead}. You said: "${fullPrompt || prompt}". ${clarifier}${knowledgeBlock}${sug}${tail}`.trim();
+
+    const raw = `${emoji ? emoji + ' ' : ''}${lead}. You said: "${fullPrompt || prompt}". ${clarifier}${knowledgeBlock}${sug}${tail}`.trim();
+    return this._reduceRepetition(raw);
+  }
+
+  // Reduce repeated lines/phrases to keep voice fresh and friendly
+  _reduceRepetition(text = '') {
+    try {
+      if (!text) return text;
+      const lines = text.split('\n');
+      const seen = new Set();
+      const out = [];
+      for (const line of lines) {
+        const norm = line.trim().replace(/\s+/g, ' ').toLowerCase();
+        if (!norm) continue;
+        if (seen.has(norm)) continue;
+        seen.add(norm);
+        out.push(line);
+      }
+      return out.join('\n');
+    } catch { return text; }
+  }
+
+  // Learn lightweight user preferences from phrasing
+  _learnFromUser(prompt = '') {
+    try {
+      const p = (prompt || '').toLowerCase();
+      if (this.persona?.learning?.adaptEmojiPreference) {
+        if (/no emoji|no emojis|disable emoji/.test(p)) this.persona.style.emojis = false;
+        if (/more emoji|more emojis|be playful/.test(p)) { this.persona.style.emojis = true; this.persona.style.maxEmojis = 2; }
+      }
+      if (this.persona?.learning?.rememberPreferredVerbosity) {
+        if (/be brief|keep it short|tl;dr/.test(p)) this.persona.style.defaultVerbosity = 'concise';
+        if (/be detailed|go deep|more detail/.test(p)) this.persona.style.defaultVerbosity = 'detailed';
+      }
+    } catch {}
   }
 
   // Create a short summary from recent conversation and persist as a knowledge file
@@ -367,13 +423,55 @@ this.persona = {
   }
 
   async seoAnalysis({ businessName, website, location, industry, websiteContent }) {
-    const websiteNotes = websiteContent ? `\n- Website Signals: ${[...new Set([
-      ...(websiteContent.h1||[]).slice(0,3),
-      ...(websiteContent.h2||[]).slice(0,3),
-      websiteContent.description || ''
-    ].filter(Boolean))].slice(0,4).join(' | ')}` : '';
+    const signals = [];
+    if (websiteContent) {
+      const picks = [...new Set([...(websiteContent.h1||[]).slice(0,2), ...(websiteContent.h2||[]).slice(0,2), websiteContent.description || ''].filter(Boolean))].slice(0,4);
+      if (picks.length) signals.push(`• ${picks.join('\n• ')}`);
+    }
+    const title = `SEO Analysis: ${businessName}${website?` (${website})`:''}${location?` — ${location}`:''}${industry?` [${industry}]`:''}`;
+    const summary = [
+      '• Snapshot of local presence and quick wins',
+      '• Prioritized actions to move the needle fast',
+      '• Assumptions are stated where data is missing'
+    ].slice(0, this.persona?.auditTemplate?.bullets?.executiveSummary || 5).join('\n');
+    const findings = [
+      '• GBP: Categories, photos, reviews, Q&A completeness',
+      '• On-Page: Titles, H1, NAP, internal links, Lighthouse basics',
+      '• Citations: Yelp, BBB, Apple Maps, data aggregators',
+      '• Reviews: Volume/velocity, response cadence, ask flow',
+      '• Social: Activity and relevance to local audience',
+      '• Competitors: 2–3 local peers and differentiation'
+    ].join('\n');
+    const actions = [
+      '• Fix top 5 on-page issues (titles/H1/NAP) — high impact/low effort',
+      '• Refresh GBP photos and add missing categories — high trust gain',
+      '• Standardize citations across top directories — consistency boost',
+      '• Implement review ask cadence (2x/week) — improve rating density',
+      '• Publish 2 location-focused posts/month — local relevance'
+    ].slice(0, this.persona?.auditTemplate?.bullets?.topActions || 7).join('\n');
+    const nextSteps = '• Want me to generate a detailed action plan or tackle the first fix next?';
+
+    const body = [
+      `# ${title}`,
+      '',
+      '## Executive Summary',
+      summary,
+      '',
+      '## Findings',
+      findings,
+      '',
+      '## Website Signals',
+      signals.length ? signals.join('\n') : '• Not enough site signals detected; we can fetch more details if you share a URL.',
+      '',
+      '## Top Actions',
+      actions,
+      '',
+      '## Next Steps',
+      nextSteps
+    ].join('\n');
+
     return this._simulateWork(async () => ({
-      analysis: `SEO Analysis for ${businessName}${website?` (${website})`:''}${location?` in ${location}`:''}${industry?` [${industry}]`:''}${websiteNotes}\n\n- GBP: Ensure categories, photos, reviews\n- On-Page: Titles, H1, NAP, internal links\n- Citations: Yelp, BBB, Apple Maps\n- Reviews: Implement request cadence\n- Competitors: Identify 2-3 and gaps\n- Actions: Top 5 quick wins`,
+      analysis: body,
       provider: this.name,
       timestamp: new Date().toISOString(),
     }), { type: 'seoAnalysis', businessName, website, location, industry, websiteContent });
