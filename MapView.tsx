@@ -140,6 +140,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const [locationPermission, setLocationPermission] = useState<'pending'|'granted'|'denied'>('pending');
     const [statusMsg, setStatusMsg] = useState<string>("");
     const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+    const [toast, setToast] = useState<{message: string; action?: () => void} | null>(null);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -213,6 +214,23 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         } catch (e) {
             console.error("Failed to parse search history from localStorage", e);
         }
+    }, []);
+
+    // Capture Maps script errors (CSP, ad blockers, etc.)
+    useEffect(() => {
+        const handleError = (event: ErrorEvent) => {
+            const msg = event?.message || '';
+            const target = (event as any)?.target;
+            if (msg.includes('maps.googleapis.com') || (target?.src && target.src.includes('maps.googleapis.com'))) {
+                console.error('Google Maps script blocked:', event);
+                setToast({
+                    message: 'Maps blocked by ad blocker or extension. Disable it and reload.',
+                    action: () => window.location.reload()
+                });
+            }
+        };
+        window.addEventListener('error', handleError, true);
+        return () => window.removeEventListener('error', handleError, true);
     }, []);
 
     // Cleanup on unmount
@@ -741,6 +759,56 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                             aria-label="Update map to show new businesses"
                         >
                             Update
+                        </button>
+                    </div>
+                )}
+                {toast && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: 16,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 20,
+                        background: 'rgba(220, 53, 69, 0.95)',
+                        color: '#fff',
+                        borderRadius: 8,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        padding: '12px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 16,
+                        maxWidth: '90%'
+                    }}>
+                        <span>{toast.message}</span>
+                        {toast.action && (
+                            <button
+                                onClick={() => { toast.action?.(); setToast(null); }}
+                                style={{
+                                    background: '#fff',
+                                    color: '#dc3545',
+                                    border: 'none',
+                                    borderRadius: 4,
+                                    padding: '6px 16px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                }}
+                            >
+                                Reload
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setToast(null)}
+                            style={{
+                                background: 'transparent',
+                                color: '#fff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: 18,
+                                padding: '0 8px'
+                            }}
+                            aria-label="Dismiss"
+                        >
+                            ×
                         </button>
                     </div>
                 )}
