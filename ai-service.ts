@@ -72,10 +72,10 @@ class LocalAIService {
   private maxRetries = 3;
 
   constructor() {
-    const envUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || '';
-    // Prefer explicit env URL when provided; otherwise use same-origin.
-    // Vite dev server will proxy /api to the backend; in Hosting, rewrites send /api to Cloud Run.
-    this.baseUrl = envUrl || '';
+  const envUrl = (import.meta.env.VITE_LOCAL_AI_URL as string) || '';
+  // Prefer explicit env URL when provided. In dev, omit baseUrl so calls hit Vite proxy /api -> 3001.
+  // In production (Firebase Hosting), rewrites route /api/** to Cloud Run service. Keep baseUrl empty for relative calls.
+  this.baseUrl = envUrl || '';
     const savedProvider = (typeof localStorage !== 'undefined' && localStorage.getItem('ai.provider')) as AIProviderName | null;
     const provider = (savedProvider || (import.meta.env.VITE_DEFAULT_AI_PROVIDER as AIProviderName) || 'claude') as AIProviderName;
     this.defaultOptions = {
@@ -327,17 +327,28 @@ class LocalAIService {
 
   // Website intelligence: fetch and parse site content
   async fetchWebsiteIntel(url: string): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/intel/website`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
-    });
-    if (!response.ok) {
-      let msg = `HTTP ${response.status}`;
-      try { const j = await response.json(); msg = j.error || msg; } catch {}
-      throw new Error(`Website intel failed: ${msg}`);
+    // Try alias path first to avoid ad-blocks; fall back to original path
+    const tryPaths = ['/api/fetch/site', '/api/intel/website'];
+    let lastErr: any = null;
+    for (const p of tryPaths) {
+      try {
+        const resp = await fetch(`${this.baseUrl}${p}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        if (!resp.ok) {
+          let msg = `HTTP ${resp.status}`;
+          try { const j = await resp.json(); msg = j.error || msg; } catch {}
+          throw new Error(msg);
+        }
+        return await resp.json();
+      } catch (e) {
+        lastErr = e;
+        // continue to next path
+      }
     }
-    return response.json();
+    throw new Error(`Website intel failed: ${lastErr?.message || 'Unknown error'}`);
   }
 
   // Reports: Generate a report

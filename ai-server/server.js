@@ -72,8 +72,8 @@ app.post('/api/features/content-calendar', asyncHandler(async (req, res) => res.
 app.post('/api/audit/start', asyncHandler(async (req, res) => res.json(await morrow.startAudit(req.body || {}))));
 app.post('/api/report/generate', asyncHandler(async (req, res) => res.json(await morrow.generateReport(req.body || {}))));
 
-// Website Intelligence: fetch and parse basic info from a URL
-app.post('/api/intel/website', asyncHandler(async (req, res) => {
+// Website Intelligence handler (extracted)
+const handleWebsiteIntel = async (req, res) => {
   const { url } = req.body || {};
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: 'Valid url is required (http/https)' });
@@ -113,7 +113,12 @@ app.post('/api/intel/website', asyncHandler(async (req, res) => {
     clearTimeout(timeout);
     return res.status(500).json({ error: e?.message || 'Failed to fetch website' });
   }
-}));
+};
+
+// Website Intelligence: original path
+app.post('/api/intel/website', asyncHandler(handleWebsiteIntel));
+// Website Intelligence: alias path to avoid ad-block false positives on "intel"
+app.post('/api/fetch/site', asyncHandler(handleWebsiteIntel));
 
 // Demo data used by UI
 app.get('/api/leads', asyncHandler(async (req, res) => res.json(await morrow.listLeads())));
