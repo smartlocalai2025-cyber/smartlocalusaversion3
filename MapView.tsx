@@ -51,11 +51,18 @@ declare namespace google.maps {
         class PlacesService {
             constructor(attrContainer: HTMLDivElement | Map);
             textSearch(request: TextSearchRequest, callback: (results: PlaceResult[] | null, status: PlacesServiceStatus) => void): void;
+            getDetails(request: { placeId: string; fields?: string[] }, callback: (place: PlaceDetailsResult | null, status: PlacesServiceStatus) => void): void;
         }
         class Autocomplete {
             constructor(inputField: HTMLInputElement, opts?: any);
             getPlace(): PlaceResult;
             addListener(eventName: string, handler: Function): MapsEventListener;
+        }
+        interface PlaceDetailsResult {
+            name?: string;
+            formatted_address?: string;
+            website?: string;
+            geometry?: { location: LatLng };
         }
         interface TextSearchRequest {
             location?: LatLng;
@@ -178,12 +185,16 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                             const newLoc = ev?.latLng || center;
                             mapInstance.current!.setCenter(newLoc);
                             // @ts-ignore center override accepted by our helper
-                            showBusinessesInBounds && showBusinessesInBounds(newLoc);
+                            if (showBusinessesInBoundsRef.current) {
+                                showBusinessesInBoundsRef.current(newLoc);
+                            }
                         });
                     } catch {}
                     // Trigger nearby search (idle handler will also fire)
                     // @ts-ignore center override accepted by our helper
-                    showBusinessesInBounds && showBusinessesInBounds(center);
+                    if (showBusinessesInBoundsRef.current) {
+                        showBusinessesInBoundsRef.current(center);
+                    }
                 }
             },
             () => setLocationPermission('denied')
@@ -320,7 +331,9 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         hasLoadedBusinesses.current = false;
         const showOnce = () => {
             if (!hasLoadedBusinesses.current) {
-                showBusinessesInBounds();
+                if (showBusinessesInBoundsRef.current) {
+                    showBusinessesInBoundsRef.current();
+                }
                 hasLoadedBusinesses.current = true;
             }
         };
@@ -417,11 +430,15 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                 programmaticMove.current = true;
                 mapInstance.current!.setCenter(newLoc);
                 // @ts-ignore center override accepted by our helper
-                showBusinessesInBounds(newLoc);
+                if (showBusinessesInBoundsRef.current) {
+                    showBusinessesInBoundsRef.current(newLoc);
+                }
                 setTimeout(() => { programmaticMove.current = false; }, 500);
             });
             // Load nearby businesses around the chosen point
-            showBusinessesInBounds(loc);
+            if (showBusinessesInBoundsRef.current) {
+                showBusinessesInBoundsRef.current(loc);
+            }
             hasLoadedBusinesses.current = true;
             setShowUpdatePrompt(false);
     })
@@ -443,9 +460,9 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     const name = auditButton.getAttribute('data-name');
                     const website = auditButton.getAttribute('data-website');
                     if (name) {
-                        onStartAudit({ 
-                            name: decodeURIComponent(name), 
-                            website: website ? decodeURIComponent(website) : undefined 
+                        onStartAudit({
+                            name: decodeURIComponent(name),
+                            website: website ? decodeURIComponent(website) : undefined
                         });
                         infoWindow.current?.close();
                     }
@@ -543,22 +560,36 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             
             marker.addListener('click', () => {
                 if (!infoWindow.current) return;
-                
-                const website = place.website ?? '';
-                const encodedName = encodeURIComponent(place.name!);
-                const encodedWebsite = encodeURIComponent(website);
 
-                const content = `
-                    <div class="map-infowindow-content">
-                        <h4>${place.name}</h4>
-                        <p>${place.formatted_address || ''}</p>
-                        <div class="map-infowindow-buttons" style="margin-top: 1rem;">
-                            <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodedWebsite}">Start an audit</button>
+                const encodedName = encodeURIComponent(place.name!);
+                const fallbackWebsite = encodeURIComponent(place.website || '');
+
+                const setInfo = (websiteValue: string) => {
+                    const content = `
+                        <div class="map-infowindow-content">
+                            <h4>${place.name}</h4>
+                            <p>${place.formatted_address || ''}</p>
+                            <div class="map-infowindow-buttons" style="margin-top: 1rem;">
+                                <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodeURIComponent(websiteValue)}">Start an audit</button>
+                            </div>
                         </div>
-                    </div>
-                `;
-                infoWindow.current.setContent(content);
-                infoWindow.current.open(mapInstance.current, marker);
+                    `;
+                    infoWindow.current!.setContent(content);
+                    infoWindow.current!.open(mapInstance.current!, marker);
+                };
+
+                // If we have a place_id, fetch details to get website
+                if (placesService.current && place.place_id) {
+                    placesService.current.getDetails({ placeId: place.place_id, fields: ['website','name','formatted_address','geometry'] }, (detail, status) => {
+                        if (status === google.maps.places.PlacesServiceStatus.OK && detail) {
+                            setInfo(detail.website || decodeURIComponent(fallbackWebsite));
+                        } else {
+                            setInfo(decodeURIComponent(fallbackWebsite));
+                        }
+                    });
+                } else {
+                    setInfo(decodeURIComponent(fallbackWebsite));
+                }
             });
             
             markers.current.push(marker);
@@ -587,8 +618,6 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             </div>
         );
     }
-    // Expose to ref for use in Update button
-    showBusinessesInBoundsRef.current = showBusinessesInBounds;
     if (locationPermission === 'denied') {
         return (
             <div className="map-view-wrapper" style={{ minHeight: 400 }}>
