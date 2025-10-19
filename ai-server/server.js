@@ -1,12 +1,11 @@
-
 console.log('Starting Morrow.AI Express server...');
 const express = require('express');
 const cors = require('cors');
-const { MorrowAI } = require('./morrow');
-const app = express();
 const cheerio = require('cheerio');
 const fsPromises = require('fs').promises;
 const net = require('net');
+const { MorrowAI } = require('./morrow');
+const app = express();
 // Simple async handler to catch rejected promises in Express 4
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 app.use(express.json());
@@ -32,6 +31,9 @@ app.post('/api/knowledge/add', asyncHandler(async (req, res) => {
 }));
 
 // Health + Stats + Features
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'ok', provider: 'Morrow.AI', root: true });
+});
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', provider: morrow.name, model: morrow.model });
 });
@@ -119,9 +121,10 @@ const handleWebsiteIntel = async (req, res) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    // Use global fetch if available (Node 18+), otherwise dynamically import node-fetch
-    const fetcher = typeof fetch === 'function' ? fetch : (await import('node-fetch')).default;
-    const resp = await fetcher(url, { signal: controller.signal, headers: { 'User-Agent': 'MorrowAI/1.0 (+https://smartlocal.ai)', 'Accept': 'text/html,application/xhtml+xml' } });
+    if (typeof fetch !== 'function') {
+      throw new Error('fetch is not available in this runtime; require Node.js 18+');
+    }
+    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'MorrowAI/1.0 (+https://smartlocal.ai)', 'Accept': 'text/html,application/xhtml+xml' } });
     clearTimeout(timeout);
     if (!resp.ok) {
       return res.status(502).json({ error: `Upstream HTTP ${resp.status}` });
