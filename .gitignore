@@ -6,6 +6,7 @@ node_modules
 !/env.example
 ai-server/.env
 functions/.env
+.env.local
 
 # Firebase Admin SDK service account key
 smartlocalai-b092a-firebase-adminsdk-fbsvc-31922800a8.json
