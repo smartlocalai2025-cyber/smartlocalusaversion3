@@ -63,6 +63,21 @@ npm test
 npm run test:ui
 ```
 
+## 🧰 Local Firebase Emulators
+
+Run the Auth and Firestore emulators to catch most failures locally (rules, indexes, auth flows):
+
+```bash
+npm run emulators         # Starts Auth (9099) and Firestore (8088) with import/export
+npm run dev:all:emu       # Emulators + Vite dev server (3000) + AI server (8080)
+```
+
+Notes
+- The frontend auto-connects to the emulators in dev mode (see `firebase.ts`).
+- Firestore emulator runs on 8088 to avoid clashing with the AI server on 8080.
+- Use the Emulator UI at http://localhost:4000 to inspect data and rule denials.
+
+
 ## 📦 Deployment
 
 The app is deployed to Firebase Hosting.

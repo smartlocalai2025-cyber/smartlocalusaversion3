@@ -14,6 +14,8 @@
     "start": "npm --prefix ai-server start",
     "start:server": "npm --prefix ai-server start",
     "dev:all": "concurrently -k \"npm:dev\" \"npm:start:server\"",
+    "emulators": "firebase emulators:start --only auth,firestore --import ./.firebase-data --export-on-exit ./.firebase-data",
+    "dev:all:emu": "concurrently -k \"npm:emulators\" \"npm:dev\" \"npm:start:server\"",
     "test": "vitest",
     "test:ui": "vitest --ui"
   },
@@ -38,6 +40,7 @@
     "jsdom": "^27.0.1",
     "typescript": "^5.4.5",
     "vite": "^5.2.13",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "firebase-tools": "^13.29.2"
   }
 }

@@ -71,7 +71,8 @@ if (import.meta.env.DEV) {
         connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
     });
     import('firebase/firestore').then(({ connectFirestoreEmulator }) => {
-        connectFirestoreEmulator(db, "localhost", 8080);
+        // Use 8088 to avoid conflict with local Express AI server on 8080
+        connectFirestoreEmulator(db, "localhost", 8088);
     });
     import('firebase/functions').then(({ connectFunctionsEmulator }) => {
         connectFunctionsEmulator(functions, "localhost", 5001);
