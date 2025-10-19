@@ -88,15 +88,20 @@ if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("xxxxxxxxxx")) {
 // --- Authentication Functions ---
 const provider = new GoogleAuthProvider();
 
+import { signInWithRedirect } from "firebase/auth";
+
 const signInWithGoogle = async () => {
     try {
         await signInWithPopup(auth, provider);
     } catch (error: any) {
         console.error("Google Sign-In Error:", error);
-        if (error.code === 'auth/popup-blocked') {
-            alert('Popup was blocked by your browser. Please allow popups for this site and try again.');
-        } else if (error.code === 'auth/popup-closed-by-user') {
-            console.log('Sign-in popup was closed by the user.');
+        // Fallback to redirect if popup fails or is blocked
+        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+            try {
+                await signInWithRedirect(auth, provider);
+            } catch (redirectError: any) {
+                alert(`Sign-in failed: ${redirectError.message}`);
+            }
         } else {
             alert(`An error occurred during sign-in: ${error.message}`);
         }
