@@ -23,3 +23,12 @@ vi.stubGlobal('import.meta', {
 if (typeof fetch === 'undefined') {
   vi.stubGlobal('fetch', vi.fn())
 }
+
+// Prevent Firebase Analytics from initializing in tests (no window/IndexedDB)
+try {
+  vi.mock('firebase/analytics', () => ({
+    getAnalytics: () => ({}),
+    isSupported: async () => false,
+    logEvent: () => {}
+  }));
+} catch {}
