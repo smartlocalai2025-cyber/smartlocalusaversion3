@@ -36,6 +36,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "site": "smartlocalai-b092a",
     "public": "dist",
     "ignore": [
       "firebase.json",

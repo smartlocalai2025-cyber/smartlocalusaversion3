@@ -159,6 +159,7 @@ class LocalAIService {
         'Content-Type': 'application/json',
         'X-Provider': (options.provider || this.defaultOptions.provider) as string,
         'X-Model': (options.model || this.defaultOptions.model) as string,
+        'X-Orchestrator': 'Morrow.AI',
         'X-Request-ID': crypto.randomUUID()
       };
 
