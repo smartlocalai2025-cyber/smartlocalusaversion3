@@ -136,9 +136,24 @@ class MorrowAI {
     return this._simulateWork(async () => {
       const fullPrompt = `${context ? `[Context:${context}] `: ''}${prompt}`;
       const snippets = this._searchKnowledge(fullPrompt, 3, 500);
+      let suggestions = [
+        'Would you like a full business audit report?',
+        'I can analyze your local SEO, competitors, or generate a content calendar.',
+        'Ask me for outreach email templates or performance analytics.'
+      ];
+      if (fullPrompt.toLowerCase().includes('audit')) {
+        suggestions.unshift('Ready to start your business audit. Please provide your business name and website.');
+      }
+      if (fullPrompt.toLowerCase().includes('seo')) {
+        suggestions.unshift('I can perform a detailed SEO analysis. Just share your business details.');
+      }
+      if (fullPrompt.toLowerCase().includes('competitor')) {
+        suggestions.unshift('Want a competitor analysis? Tell me your location and industry.');
+      }
       const knowledgeNote = snippets.length ? `\n\n[Knowledge]\n${snippets.map(s=>`- ${s.title}`).join('\n')}` : '';
       return {
-        response: `Morrow.AI here (provider: ${this.activeProvider}). You said: \"${fullPrompt}\".${knowledgeNote}\nHow can I help further?`,
+        response:
+          `Morrow.AI (provider: ${this.activeProvider})\n\nYou said: \"${fullPrompt}\".${knowledgeNote}\n\nSuggestions:\n- ${suggestions.join('\n- ')}\n\nHow can I assist you next?`,
         conversationId: conversationId || `conv_${Date.now()}`,
         provider: this.name,
         timestamp: new Date().toISOString(),
