@@ -121,16 +121,17 @@ const MapError: FC<{ message: string }> = ({ message }) => (
     </div>
 );
 
-// --- Main Map View Component ---
 
+// --- Main Map View Component ---
 export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const [isApiReady, setIsApiReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true); // Start with loading true
+    const [loading, setLoading] = useState(true);
     const [searchHistory, setSearchHistory] = useState<string[]>([]);
     const [isHistoryVisible, setHistoryVisible] = useState(false);
     const [locationPermission, setLocationPermission] = useState<'pending'|'granted'|'denied'>('pending');
-    
+    const [statusMsg, setStatusMsg] = useState<string>("");
+
     const mapRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const mapInstance = useRef<google.maps.Map | null>(null);
@@ -138,7 +139,9 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const infoWindow = useRef<google.maps.InfoWindow | null>(null);
     const markers = useRef<google.maps.Marker[]>([]);
     const selectedMarker = useRef<google.maps.Marker | null>(null);
-    
+    const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+    const listeners = useRef<google.maps.MapsEventListener[]>([]);
+
     const HISTORY_KEY = 'smartlocal-map-search-history';
     const MAX_HISTORY_ITEMS = 10;
 
@@ -186,6 +189,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         );
     };
 
+
+    // Load search history on mount
     useEffect(() => {
         try {
             const storedHistory = localStorage.getItem(HISTORY_KEY);
@@ -195,6 +200,28 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         } catch (e) {
             console.error("Failed to parse search history from localStorage", e);
         }
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            // Remove all markers
+            markers.current.forEach(marker => marker.setMap(null));
+            markers.current = [];
+            // Remove selected marker
+            if (selectedMarker.current) selectedMarker.current.setMap(null);
+            // Remove map listeners
+            listeners.current.forEach(l => l.remove());
+            listeners.current = [];
+            // Remove autocomplete listeners
+            if (autocompleteRef.current) {
+                (window as any).google.maps.event.clearInstanceListeners(autocompleteRef.current);
+            }
+            // Remove infoWindow listeners
+            if (infoWindow.current) {
+                (window as any).google.maps.event.clearInstanceListeners(infoWindow.current);
+            }
+        };
     }, []);
 
 
@@ -210,6 +237,12 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             } else {
                 setLocationPermission('denied');
             }
+            return;
+        }
+        // API key check
+        if (!MAPS_API_KEY) {
+            setError("Google Maps API key is missing. Please set VITE_GOOGLE_MAPS_API_KEY in your environment.");
+            setLoading(false);
             return;
         }
         // Now load the map
@@ -312,23 +345,27 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             });
         }
 
-        const autocomplete = new google.maps.places.Autocomplete(searchInputRef.current, {
-             fields: ["geometry", "name"],
-        });
-        
-        autocomplete.addListener('place_changed', () => {
-            const place = autocomplete.getPlace();
-            const query = searchInputRef.current?.value || place.name || "";
-            if (place.geometry && place.geometry.location) {
-                mapInstance.current?.setCenter(place.geometry.location);
-                mapInstance.current?.setZoom(14);
-            }
-            performSearch({ query });
-        });
+
+        // Autocomplete setup (only once)
+        if (!autocompleteRef.current && searchInputRef.current) {
+            autocompleteRef.current = new google.maps.places.Autocomplete(searchInputRef.current, {
+                fields: ["geometry", "name"],
+            });
+            autocompleteRef.current.addListener('place_changed', () => {
+                const place = autocompleteRef.current!.getPlace();
+                const query = searchInputRef.current?.value || place.name || "";
+                if (place.geometry && place.geometry.location) {
+                    mapInstance.current?.setCenter(place.geometry.location);
+                    mapInstance.current?.setZoom(14);
+                }
+                performSearch({ query });
+            });
+        }
 
         // Allow the user to CLICK on map to "pick" a location
         // @ts-ignore: event typings are simplified here
-        window.google.maps.event.addListener(mapInstance.current, 'click', (e: any) => {
+        listeners.current.push(
+            window.google.maps.event.addListener(mapInstance.current, 'click', (e: any) => {
             const loc = e?.latLng;
             if (!loc) return;
             // Center/zoom the map to the clicked location
@@ -355,9 +392,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             });
             // Load nearby businesses around the chosen point
             showBusinessesInBounds(loc);
-        });
+    })
+    );
 
-        infoWindow.current.addListener('domready', () => {
+        listeners.current.push(
+            infoWindow.current.addListener('domready', () => {
             const container = document.querySelector('.map-infowindow-content');
             if (!container || container.classList.contains('click-handler-attached')) {
                 return;
@@ -381,7 +420,8 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     return;
                 }
             });
-        });
+            })
+        );
     };
 
     // Helper to show default business markers
@@ -498,11 +538,12 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         }
     };
 
+    // Responsive and accessible rendering
     if (locationPermission === 'pending') {
         return (
-            <div className="map-view-wrapper">
+            <div className="map-view-wrapper" style={{ minHeight: 400 }}>
                 <MapLoaderFC />
-                <div className="map-permission-message">
+                <div className="map-permission-message" aria-live="polite">
                     Please allow location access to show local businesses on the map.
                     <div style={{ marginTop: '0.75rem' }}>
                         <button className="btn btn-primary" onClick={requestLocation}>Enable my location</button>
@@ -516,20 +557,20 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     }
     if (locationPermission === 'denied') {
         return (
-            <div className="map-view-wrapper">
+            <div className="map-view-wrapper" style={{ minHeight: 400 }}>
                 <MapError message="Location access denied. Showing default area. You can try again or enable location in your browser settings." />
                 <div style={{ margin: '0.75rem 0' }}>
                     <button className="btn" onClick={requestLocation}>Try again</button>
                 </div>
-                <div ref={mapRef} className="map-container"></div>
+                <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
             </div>
         );
     }
     return (
-        <div className="map-view-wrapper">
+        <div className="map-view-wrapper" style={{ minHeight: 400 }}>
             {error && <MapError message={error} />}
             {loading && <MapLoaderFC />}
-            <div className="map-search-container">
+            <div className="map-search-container" aria-live="polite">
                 <input
                     ref={searchInputRef}
                     type="text"
@@ -538,7 +579,6 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     disabled={!isApiReady}
                     onFocus={() => setHistoryVisible(true)}
                     onBlur={() => {
-                        // Delay hiding to allow clicks on history items
                         setTimeout(() => setHistoryVisible(false), 200);
                     }}
                     onKeyDown={(e) => {
@@ -547,6 +587,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                         }
                     }}
                     autoComplete="off"
+                    aria-label="Search for a business or location"
                 />
                 <button
                     className="btn"
@@ -559,13 +600,15 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     Use my location
                 </button>
                 {isHistoryVisible && searchHistory.length > 0 && (
-                    <div className="search-history-dropdown">
+                    <div className="search-history-dropdown" role="listbox">
                         {searchHistory.map((item, index) => (
                             <div
                                 key={`${item}-${index}`}
                                 className="search-history-item"
-                                // Use onMouseDown to trigger before the input's onBlur
                                 onMouseDown={() => handleHistoryClick(item)}
+                                role="option"
+                                tabIndex={0}
+                                aria-selected={false}
                             >
                                 {item}
                             </div>
@@ -573,7 +616,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     </div>
                 )}
             </div>
-            <div ref={mapRef} className="map-container"></div>
+            <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
         </div>
     );
 };
