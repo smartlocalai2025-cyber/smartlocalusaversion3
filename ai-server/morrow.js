@@ -11,6 +11,7 @@ class MorrowAI {
     this.name = 'Morrow.AI';
     this.model = process.env.MORROW_MODEL || 'controller-v1';
     this.queue = [];
+    this.memory = new Map(); // conversationId -> [{ role, content, ts }]
     this.stats = {
       totalRequests: 0,
       avgLatency: 0,
@@ -74,6 +75,25 @@ class MorrowAI {
 
     // Load knowledge from disk
     this._loadKnowledge();
+
+    // Persona configuration
+    this.persona = {
+      name: 'Morrow',
+      vibe: 'high-energy, encouraging, straight-talking, not robotic',
+      style: {
+        emojis: true,
+        maxEmojis: 2,
+        bulletPrefix: '•',
+        signoff: 'What do you want to tackle next?'
+      },
+      principles: [
+        'Be human: use short paragraphs and clear language',
+        'Mirror the user\'s energy and tone without overdoing it',
+        'If unclear, be cool about it; offer 2-3 concrete next steps',
+        "Prefer action over theory—always suggest what we can do now",
+        'Keep it respectful, positive, and confident'
+      ]
+    };
   }
 
   _updateStats(durationMs, tokens = 0, cost = 0) {
@@ -105,28 +125,100 @@ class MorrowAI {
 
   async _simulateWork(fn, logKnowledge = null) {
     const start = Date.now();
+    this.queue.push(start);
     try {
-      this.queue.push(start);
       const result = await fn();
+      if (logKnowledge) {
+        this._logKnowledgeCall(logKnowledge);
+      }
       return result;
     } finally {
       const duration = Date.now() - start;
       this._updateStats(duration);
       this.queue.shift();
     }
-      if (logKnowledge) {
-        this._logKnowledgeCall(logKnowledge);
-      }
+  }
+
+  _inferTone(text = '') {
+    const t = (text || '').trim();
+    const loud = (t.match(/!/g) || []).length;
+    const urgent = /\b(asap|urgent|now|immediately)\b/i.test(t) || loud >= 3;
+    const casual = /\b(bro|dude|lol|hey|yo)\b/i.test(t);
+    const formal = /\b(dear|regards|sincerely)\b/i.test(t);
+    if (urgent) return 'urgent';
+    if (casual) return 'casual';
+    if (formal) return 'formal';
+    if (loud > 0) return 'high-energy';
+    return 'neutral';
+  }
+
+  _maybeEmoji(tone) {
+    if (!this.persona?.style?.emojis) return '';
+    const map = {
+      'urgent': '⚡',
+      'high-energy': '🔥',
+      'casual': '🙂',
+      'formal': '📌',
+      'neutral': '✨'
+    };
+    return map[tone] || '✨';
+  }
+
+  _isAmbiguous(text = '') {
+    const t = (text || '').trim();
+    if (t.length < 3) return true;
+    const hasQuestion = t.includes('?');
+    const hasVerb = /\b(do|make|create|analyze|help|need|want|should|can|build|fix)\b/i.test(t);
+    return !hasQuestion && !hasVerb;
+  }
+
+  _pushMessage(conversationId, role, content) {
+    if (!conversationId) return;
+    const arr = this.memory.get(conversationId) || [];
+    arr.push({ role, content, ts: Date.now() });
+    // keep only last 12
+    this.memory.set(conversationId, arr.slice(-12));
+  }
+
+  _getContextSnippet(conversationId) {
+    const arr = this.memory.get(conversationId) || [];
+    if (!arr.length) return '';
+    // take last 2 user messages for quick context
+    const last = arr.filter(m => m.role === 'user').slice(-2).map(m => m.content).join(' | ');
+    return last ? `Recent context: ${last}` : '';
+  }
+
+  _companionReply({ prompt, fullPrompt, snippets, tone, ambiguous, suggestions }) {
+    const emoji = this._maybeEmoji(tone);
+    const lead = tone === 'urgent' ? 'On it' : tone === 'high-energy' ? 'Let\'s go' : tone === 'casual' ? 'Gotcha' : 'Got it';
+    const bullet = this.persona?.style?.bulletPrefix || '-';
+    const knowledgeLines = (snippets || []).slice(0,3).map(s => `${bullet} From: ${s.title}`);
+    const knowledgeBlock = knowledgeLines.length ? `\n\nKnowledge I can use:\n${knowledgeLines.join('\n')}` : '';
+    const clarifier = ambiguous ? `I might be a bit off—mind clarifying what you want?` : '';
+    const sug = suggestions && suggestions.length ? `\n\nNext steps:\n${suggestions.slice(0,3).map(s=>`${bullet} ${s}`).join('\n')}` : '';
+    const tail = this.persona?.style?.signoff ? `\n\n${this.persona.style.signoff}` : '';
+    return `${emoji} ${lead}. You said: "${fullPrompt || prompt}". ${clarifier}${knowledgeBlock}${sug}${tail}`.trim();
   }
 
   async chat({ prompt, conversationId }) {
     return this._simulateWork(async () => {
+      const convId = conversationId || `conv_${Date.now()}`;
+      const tone = this._inferTone(prompt);
       const snippets = this._searchKnowledge(prompt, 3, 500);
-      const knowledgeNote = snippets.length ? `\n\n[Knowledge]\n${snippets.map(s=>`- ${s.title}`).join('\n')}` : '';
+      const ambiguous = this._isAmbiguous(prompt);
+      const suggestions = [
+        'Run a quick audit to benchmark your local presence',
+        'Draft an outreach email for new leads',
+        'Generate 3 SEO-optimized post ideas'
+      ];
+      const response = this._companionReply({ prompt, fullPrompt: prompt, snippets, tone, ambiguous, suggestions });
+      this._pushMessage(convId, 'user', prompt);
+      this._pushMessage(convId, 'assistant', response);
       return {
-        response: `Morrow.AI here (provider: ${this.activeProvider}). You said: \"${prompt}\".${knowledgeNote}\nHow can I help further?`,
-        conversationId: conversationId || `conv_${Date.now()}`,
+        response,
+        conversationId: convId,
         provider: this.name,
+        tone,
         timestamp: new Date().toISOString(),
       };
     }, { type: 'chat', prompt, conversationId });
@@ -134,28 +226,28 @@ class MorrowAI {
 
   async assistant({ prompt, context, conversationId }) {
     return this._simulateWork(async () => {
+      const convId = conversationId || `conv_${Date.now()}`;
       const fullPrompt = `${context ? `[Context:${context}] `: ''}${prompt}`;
+      const tone = this._inferTone(fullPrompt);
       const snippets = this._searchKnowledge(fullPrompt, 3, 500);
+      const ambiguous = this._isAmbiguous(fullPrompt);
       let suggestions = [
-        'Would you like a full business audit report?',
-        'I can analyze your local SEO, competitors, or generate a content calendar.',
-        'Ask me for outreach email templates or performance analytics.'
+        'Start a full business audit',
+        'Run a local SEO analysis',
+        'Generate a 30-day content calendar'
       ];
-      if (fullPrompt.toLowerCase().includes('audit')) {
-        suggestions.unshift('Ready to start your business audit. Please provide your business name and website.');
-      }
-      if (fullPrompt.toLowerCase().includes('seo')) {
-        suggestions.unshift('I can perform a detailed SEO analysis. Just share your business details.');
-      }
-      if (fullPrompt.toLowerCase().includes('competitor')) {
-        suggestions.unshift('Want a competitor analysis? Tell me your location and industry.');
-      }
-      const knowledgeNote = snippets.length ? `\n\n[Knowledge]\n${snippets.map(s=>`- ${s.title}`).join('\n')}` : '';
+      const fp = fullPrompt.toLowerCase();
+      if (fp.includes('audit')) suggestions.unshift('Kick off an audit with your business name and website');
+      if (fp.includes('seo')) suggestions.unshift('Perform a detailed SEO check (GBP, citations, on-page)');
+      if (fp.includes('competitor')) suggestions.unshift('Run a competitor analysis for your city and niche');
+      const response = this._companionReply({ prompt, fullPrompt, snippets, tone, ambiguous, suggestions });
+      this._pushMessage(convId, 'user', fullPrompt);
+      this._pushMessage(convId, 'assistant', response);
       return {
-        response:
-          `Morrow.AI (provider: ${this.activeProvider})\n\nYou said: \"${fullPrompt}\".${knowledgeNote}\n\nSuggestions:\n- ${suggestions.join('\n- ')}\n\nHow can I assist you next?`,
-        conversationId: conversationId || `conv_${Date.now()}`,
+        response,
+        conversationId: convId,
         provider: this.name,
+        tone,
         timestamp: new Date().toISOString(),
       };
     }, { type: 'assistant', prompt, context, conversationId });
