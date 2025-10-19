@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StatusIndicator } from './StatusIndicator';
 import { localAI } from '../ai-service';
+import { VoiceAssistant } from './VoiceAssistant';
 
 const Dashboard: React.FC = () => {
   const [aiHealth, setAiHealth] = useState<boolean>(false);
@@ -9,6 +10,7 @@ const Dashboard: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [showVoiceAssistant, setShowVoiceAssistant] = useState<boolean>(false);
 
   useEffect(() => {
     const load = async () => {
@@ -103,6 +105,23 @@ const Dashboard: React.FC = () => {
             </li>
           ))}
         </ul>
+      </section>
+      <section>
+        <h2>Morrow.AI Voice Assistant</h2>
+        <button 
+          onClick={() => setShowVoiceAssistant(!showVoiceAssistant)}
+          style={{ marginBottom: '1rem' }}
+        >
+          {showVoiceAssistant ? '🔇 Hide' : '🎤 Show'} Voice Assistant
+        </button>
+        {showVoiceAssistant && (
+          <VoiceAssistant 
+            onResponse={(response) => {
+              setMessage(response);
+              setError('');
+            }}
+          />
+        )}
       </section>
       <section>
         <h2>Quick Actions</h2>
