@@ -20,7 +20,9 @@
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@googlemaps/js-api-loader": "^1.16.6",
-    "express": "^4.19.2",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "firebase": "^10.12.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
