@@ -75,6 +75,9 @@ class MorrowAI {
 
     // Load knowledge from disk
     this._loadKnowledge();
+  // Load persistent memory (if any) and periodically persist memory to disk
+  try { this._loadMemoryFromDisk(); } catch (e) {}
+  this._memorySaveInterval = setInterval(() => { try { this._saveMemoryToDisk(); } catch (e) {} }, 30_000);
 
     // Persona configuration
     this.persona = {
@@ -137,6 +140,44 @@ class MorrowAI {
       this._updateStats(duration);
       this.queue.shift();
     }
+
+    }
+
+  // Persistent memory file for simple restart survival
+  _memoryFile() {
+    try {
+      return path.join(this.knowledgeDir, 'memory.json');
+    } catch (e) {
+      return null;
+    }
+  }
+
+
+  // Save memory to disk periodically so the agent can "remember" across restarts
+  _saveMemoryToDisk() {
+    try {
+      const mf = this._memoryFile();
+      if (!mf) return;
+      const obj = {};
+      for (const [k, arr] of this.memory.entries()) obj[k] = arr.slice(-50);
+      fs.writeFileSync(mf, JSON.stringify(obj, null, 2), 'utf8');
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to save memory:', e?.message || e);
+    }
+  }
+
+  _loadMemoryFromDisk() {
+    try {
+      const mf = this._memoryFile();
+      if (!mf || !fs.existsSync(mf)) return;
+      const raw = fs.readFileSync(mf, 'utf8');
+      const obj = JSON.parse(raw);
+      for (const k of Object.keys(obj || {})) this.memory.set(k, obj[k] || []);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to load memory:', e?.message || e);
+    }
   }
 
   _inferTone(text = '') {
@@ -198,6 +239,65 @@ class MorrowAI {
     const sug = suggestions && suggestions.length ? `\n\nNext steps:\n${suggestions.slice(0,3).map(s=>`${bullet} ${s}`).join('\n')}` : '';
     const tail = this.persona?.style?.signoff ? `\n\n${this.persona.style.signoff}` : '';
     return `${emoji} ${lead}. You said: "${fullPrompt || prompt}". ${clarifier}${knowledgeBlock}${sug}${tail}`.trim();
+  }
+
+  // Create a short summary from recent conversation and persist as a knowledge file
+  _summarizeConversationToKB(conversationId) {
+    try {
+      const arr = this.memory.get(conversationId) || [];
+      if (!arr.length) return null;
+      // Build a compact summary: last user+assistant exchanges
+      const lines = [];
+      const slice = arr.slice(-20);
+      for (const m of slice) {
+        const who = m.role === 'user' ? 'User' : 'Assistant';
+        lines.push(`- ${who}: ${String(m.content).replace(/\n/g, ' ' ).slice(0, 800)}`);
+      }
+      const summary = [`# Conversation Summary (${conversationId})`, '', 'Recent exchange:', '', ...lines].join('\n');
+      // Persist to knowledge dir
+      const fname = `conv_${conversationId}_${Date.now()}.md`;
+      const full = path.join(this.knowledgeDir, fname);
+      fs.writeFileSync(full, summary, 'utf8');
+      // Refresh KB index
+      this._loadKnowledge();
+      return { title: fname, path: full };
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to summarize conversation:', e?.message || e);
+      return null;
+    }
+  }
+
+  // Smarter suggestion generator that weights actions by context and past user behavior
+  _generateSmartSuggestions(fullPrompt, snippets = []) {
+    const low = (s) => ({ text: s, priority: 1 });
+    const med = (s) => ({ text: s, priority: 2 });
+    const high = (s) => ({ text: s, priority: 3 });
+    const out = [];
+    const fp = (fullPrompt || '').toLowerCase();
+    if (fp.includes('launch') || fp.includes('campaign') || fp.includes('big')) {
+      out.push(high('Draft a launch plan with timeline and channels'));
+      out.push(med('Prepare 3 promotional posts for GBP and social channels'));
+    }
+    if (fp.includes('audit') || fp.includes('seo')) {
+      out.push(high('Run a local SEO audit (GBP, citations, on-page)'));
+      out.push(med('Generate prioritized action list with estimated effort'));
+    }
+    if (fp.includes('competitor')) {
+      out.push(high('Run competitor analysis for the specified location'));
+    }
+    // Add snippet-driven suggestions
+    if ((snippets || []).length) {
+      out.push(med('I found related knowledge that might help — would you like an action plan based on it?'));
+    }
+    // Fallback suggestions
+    if (!out.length) {
+      out.push(med('Run a quick audit to benchmark your local presence'));
+      out.push(low('Generate 3 SEO-optimized post ideas'));
+      out.push(low('Draft a follow-up outreach email'));
+    }
+    // Return sorted by priority desc and as text array
+    return out.sort((a,b)=>b.priority-a.priority).map(o=>o.text);
   }
 
   async chat({ prompt, conversationId }) {
