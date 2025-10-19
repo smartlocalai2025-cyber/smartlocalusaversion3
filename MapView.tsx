@@ -351,8 +351,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         };
         if (useLocation) {
             programmaticMove.current = true;
-            showOnce();
-            setTimeout(() => { programmaticMove.current = false; }, 500);
+            // Defer to next tick so showBusinessesInBoundsRef is assigned
+            setTimeout(() => {
+                showOnce();
+                programmaticMove.current = false;
+            }, 0);
         } else {
             // If not using geolocation, show businesses after map is ready
             programmaticMove.current = true;
@@ -372,7 +375,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
         );
 
     const showBusinessesInBounds = (centerOverride?: any) => {
-        if (!mapInstance.current || !placesService.current) return;
+        if (!mapInstance.current || !placesService.current) {
+            setLoading(false);
+            try { createDefaultMarkers(window.google); } catch {}
+            return;
+        }
         setLoading(true);
         // Clear old markers before adding new ones
         markers.current.forEach(marker => marker.setMap(null));
@@ -641,7 +648,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                 <div style={{ margin: '0.75rem 0' }}>
                     <button className="btn" onClick={requestLocation}>Try again</button>
                 </div>
-                <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
+                <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }} aria-label="Map container"></div>
             </div>
         );
     }
