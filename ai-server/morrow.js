@@ -79,24 +79,27 @@ class MorrowAI {
   try { this._loadMemoryFromDisk(); } catch (e) {}
   this._memorySaveInterval = setInterval(() => { try { this._saveMemoryToDisk(); } catch (e) {} }, 30_000);
 
-    // Persona configuration
-    this.persona = {
-      name: 'Morrow',
-      vibe: 'high-energy, encouraging, straight-talking, not robotic',
-      style: {
-        emojis: true,
-        maxEmojis: 2,
-        bulletPrefix: '•',
-        signoff: 'What do you want to tackle next?'
-      },
-      principles: [
-        'Be human: use short paragraphs and clear language',
-        'Mirror the user\'s energy and tone without overdoing it',
-        'If unclear, be cool about it; offer 2-3 concrete next steps',
-        "Prefer action over theory—always suggest what we can do now",
-        'Keep it respectful, positive, and confident'
-      ]
-    };
+    // Master Persona configuration
+this.persona = {
+  name: 'Morrow',
+  vibe: 'high-energy, expert, ultra-encouraging, straight-talking, never robotic',
+  style: {
+    emojis: true,
+    maxEmojis: 3, // Masters can be more expressive!
+    bulletPrefix: '•',
+    signoff: 'What next can we conquer together?'
+  },
+  principles: [
+    'Be human: speak clearly, act decisively, and keep things simple',
+    'Always match and raise the user’s energy—be their best coach',
+    'When unclear, confidently suggest 2-3 strong, expert next steps',
+    'Lead with action: turn theory into impact—recommend bold moves',
+    'Maintain respect, unwavering positivity, and authority at all times',
+    'Empower the user to make smart choices at every turn',
+    'Celebrate wins and push forward—there is always another level'
+  ]
+};
+
   }
 
   _updateStats(durationMs, tokens = 0, cost = 0) {
@@ -363,12 +366,17 @@ class MorrowAI {
     return this._simulateWork(async () => ({ images: [`https://placehold.co/1024x576?text=${encodeURIComponent(prompt || 'Morrow.AI')}`] }), { type: 'image', prompt });
   }
 
-  async seoAnalysis({ businessName, website, location, industry }) {
+  async seoAnalysis({ businessName, website, location, industry, websiteContent }) {
+    const websiteNotes = websiteContent ? `\n- Website Signals: ${[...new Set([
+      ...(websiteContent.h1||[]).slice(0,3),
+      ...(websiteContent.h2||[]).slice(0,3),
+      websiteContent.description || ''
+    ].filter(Boolean))].slice(0,4).join(' | ')}` : '';
     return this._simulateWork(async () => ({
-      analysis: `SEO Analysis for ${businessName}${website?` (${website})`:''}${location?` in ${location}`:''}${industry?` [${industry}]`:''}\n\n- GBP: Ensure categories, photos, reviews\n- On-Page: Titles, H1, NAP, internal links\n- Citations: Yelp, BBB, Apple Maps\n- Reviews: Implement request cadence\n- Competitors: Identify 2-3 and gaps\n- Actions: Top 5 quick wins`,
+      analysis: `SEO Analysis for ${businessName}${website?` (${website})`:''}${location?` in ${location}`:''}${industry?` [${industry}]`:''}${websiteNotes}\n\n- GBP: Ensure categories, photos, reviews\n- On-Page: Titles, H1, NAP, internal links\n- Citations: Yelp, BBB, Apple Maps\n- Reviews: Implement request cadence\n- Competitors: Identify 2-3 and gaps\n- Actions: Top 5 quick wins`,
       provider: this.name,
       timestamp: new Date().toISOString(),
-    }), { type: 'seoAnalysis', businessName, website, location, industry });
+    }), { type: 'seoAnalysis', businessName, website, location, industry, websiteContent });
   }
 
   async socialContent({ businessName, topic, platform, tone, includeImage }) {
@@ -388,11 +396,12 @@ class MorrowAI {
     return this._simulateWork(async () => ({ calendar: text, provider: this.name }), { type: 'contentCalendar', businessName, industry, timeframe, platforms });
   }
 
-  async startAudit({ businessName, website, scope = [] }) {
+  async startAudit({ businessName, website, scope = [], websiteContent }) {
+    const contentHint = websiteContent?.title || websiteContent?.description;
     return this._simulateWork(async () => ({
-      report: `Started audit for ${businessName}${website?` (${website})`:''}. Scope: ${scope.join(', ') || 'standard local SEO'}.`,
+      report: `Started audit for ${businessName}${website?` (${website})`:''}. Scope: ${scope.join(', ') || 'standard local SEO'}. ${contentHint?`Initial site signal: ${contentHint}`:''}`,
       provider: this.name,
-    }), { type: 'startAudit', businessName, website, scope });
+    }), { type: 'startAudit', businessName, website, scope, websiteContent });
   }
 
   async generateReport({ auditId, format = 'markdown' }) {

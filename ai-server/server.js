@@ -3,6 +3,7 @@ console.log('Starting Morrow.AI Express server...');
 const express = require('express');
 const { MorrowAI } = require('./morrow');
 const app = express();
+const cheerio = require('cheerio');
 // Simple async handler to catch rejected promises in Express 4
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 app.use(express.json());
@@ -70,6 +71,49 @@ app.post('/api/features/content-calendar', asyncHandler(async (req, res) => res.
 // Audits & Reports
 app.post('/api/audit/start', asyncHandler(async (req, res) => res.json(await morrow.startAudit(req.body || {}))));
 app.post('/api/report/generate', asyncHandler(async (req, res) => res.json(await morrow.generateReport(req.body || {}))));
+
+// Website Intelligence: fetch and parse basic info from a URL
+app.post('/api/intel/website', asyncHandler(async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'Valid url is required (http/https)' });
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'MorrowAI/1.0 (+https://smartlocal.ai)' } });
+    clearTimeout(timeout);
+    if (!resp.ok) {
+      return res.status(502).json({ error: `Upstream HTTP ${resp.status}` });
+    }
+    const html = await resp.text();
+    const $ = cheerio.load(html);
+    const title = $('title').first().text().trim();
+    const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
+    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+    const h1 = $('h1').map((i, el) => $(el).text().trim()).get().slice(0, 5);
+    const h2 = $('h2').map((i, el) => $(el).text().trim()).get().slice(0, 8);
+    // Grab visible text from common sections (limit size)
+    const textBlocks = [];
+    $('p, li').each((i, el) => {
+      const t = $(el).text().replace(/\s+/g, ' ').trim();
+      if (t && t.length > 40 && t.length < 500) textBlocks.push(t);
+    });
+    const contentSample = textBlocks.slice(0, 50);
+    res.json({
+      ok: true,
+      url,
+      title: ogTitle || title,
+      description,
+      h1,
+      h2,
+      contentSample
+    });
+  } catch (e) {
+    clearTimeout(timeout);
+    return res.status(500).json({ error: e?.message || 'Failed to fetch website' });
+  }
+}));
 
 // Demo data used by UI
 app.get('/api/leads', asyncHandler(async (req, res) => res.json(await morrow.listLeads())));

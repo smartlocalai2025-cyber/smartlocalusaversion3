@@ -296,6 +296,7 @@ class LocalAIService {
     website?: string;
     location?: string;
     industry?: string;
+    websiteContent?: any;
   }, options: AIServiceOptions = {}): Promise<AIResponse> {
     return this.request('/api/features/seo-analysis', businessData, options);
   }
@@ -317,8 +318,24 @@ class LocalAIService {
     website?: string;
     scope?: string[];
     notes?: string;
+    websiteContent?: any;
   } = {}, options: AIServiceOptions = {}): Promise<AIResponse> {
     return this.request('/api/audit/start', payload, options);
+  }
+
+  // Website intelligence: fetch and parse site content
+  async fetchWebsiteIntel(url: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/api/intel/website`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (!response.ok) {
+      let msg = `HTTP ${response.status}`;
+      try { const j = await response.json(); msg = j.error || msg; } catch {}
+      throw new Error(`Website intel failed: ${msg}`);
+    }
+    return response.json();
   }
 
   // Reports: Generate a report

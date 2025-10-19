@@ -84,7 +84,7 @@ declare namespace google.maps {
 
 // --- Component Props ---
 interface MapViewProps {
-    onStartAudit: (business: { name: string; website?: string }) => void;
+    onStartAudit: (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string }) => void;
 }
 
 // --- Constants ---
@@ -141,6 +141,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const [statusMsg, setStatusMsg] = useState<string>("");
     const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
     const [toast, setToast] = useState<{message: string; action?: () => void} | null>(null);
+    const [pendingBusiness, setPendingBusiness] = useState<{ name: string; website?: string; address?: string } | null>(null);
+    const [showCreateProfile, setShowCreateProfile] = useState(false);
+    const [extraDetails, setExtraDetails] = useState<{ website?: string; location?: string; industry?: string; notes?: string }>({});
+    const [intel, setIntel] = useState<any>(null);
+    const [isFetchingIntel, setIsFetchingIntel] = useState(false);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -611,7 +616,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                             <h4>${place.name}</h4>
                             <p>${place.formatted_address || ''}</p>
                             <div class="map-infowindow-buttons" style="margin-top: 1rem;">
-                                <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodeURIComponent(websiteValue)}">Start an audit</button>
+                                <button class="btn btn-primary btn-start-audit" data-name="${encodedName}" data-website="${encodeURIComponent(websiteValue)}">Create profile & audit</button>
                             </div>
                         </div>
                     `;
@@ -624,12 +629,16 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                     placesService.current.getDetails({ placeId: place.place_id, fields: ['website','name','formatted_address','geometry'] }, (detail, status) => {
                         if (status === google.maps.places.PlacesServiceStatus.OK && detail) {
                             setInfo(detail.website || decodeURIComponent(fallbackWebsite));
+                            // Store pending business for wizard flow
+                            setPendingBusiness({ name: place.name!, website: detail.website || undefined, address: place.formatted_address || '' });
                         } else {
                             setInfo(decodeURIComponent(fallbackWebsite));
+                            setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
                         }
                     });
                 } else {
                     setInfo(decodeURIComponent(fallbackWebsite));
+                    setPendingBusiness({ name: place.name!, website: place.website || undefined, address: place.formatted_address || '' });
                 }
             });
             
@@ -727,6 +736,98 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
             </div>
             <div style={{ position: 'relative' }}>
                 <div ref={mapRef} className="map-container" style={{ minHeight: 350, width: '100%', borderRadius: 8 }}></div>
+                {pendingBusiness && (
+                    <div style={{
+                        position: 'absolute',
+                        right: 16,
+                        top: 16,
+                        zIndex: 15,
+                        background: 'rgba(255,255,255,0.98)',
+                        borderRadius: 8,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        padding: 16,
+                        width: 360,
+                        maxWidth: '90vw'
+                    }}>
+                        <h4 style={{marginTop:0}}>Create profile & run audit</h4>
+                        <div style={{fontSize:14, opacity:0.9, marginBottom:8}}>
+                            {pendingBusiness.name}
+                            {pendingBusiness.address && <div style={{opacity:0.8}}>{pendingBusiness.address}</div>}
+                        </div>
+                        <label style={{display:'block', fontSize:12, marginTop:8}}>Website</label>
+                        <input
+                            defaultValue={pendingBusiness.website || ''}
+                            onChange={(e)=> setExtraDetails(prev=>({ ...prev, website: e.target.value }))}
+                            placeholder="https://example.com"
+                            style={{width:'100%'}}
+                        />
+                        <label style={{display:'block', fontSize:12, marginTop:8}}>Location</label>
+                        <input
+                            defaultValue={pendingBusiness.address || ''}
+                            onChange={(e)=> setExtraDetails(prev=>({ ...prev, location: e.target.value }))}
+                            placeholder="City, State"
+                            style={{width:'100%'}}
+                        />
+                        <label style={{display:'block', fontSize:12, marginTop:8}}>Industry</label>
+                        <input
+                            onChange={(e)=> setExtraDetails(prev=>({ ...prev, industry: e.target.value }))}
+                            placeholder="e.g., Restaurant, Plumbing"
+                            style={{width:'100%'}}
+                        />
+                        <label style={{display:'block', fontSize:12, marginTop:8}}>Notes (optional)</label>
+                        <textarea
+                            rows={3}
+                            onChange={(e)=> setExtraDetails(prev=>({ ...prev, notes: e.target.value }))}
+                            placeholder="Anything specific to focus on"
+                            style={{width:'100%'}}
+                        />
+                        <div style={{display:'flex', gap:8, marginTop:12, alignItems:'center'}}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={async ()=>{
+                                    try {
+                                        // Optional: fetch website intel before audit
+                                        setIsFetchingIntel(true);
+                                        let intelData: any = null;
+                                        const site = (extraDetails.website || pendingBusiness.website || '').trim();
+                                        if (site && /^https?:\/\//i.test(site)) {
+                                            const mod = await import('./ai-service');
+                                            intelData = await mod.localAI.fetchWebsiteIntel(site);
+                                        }
+                                        setIntel(intelData);
+                                        setIsFetchingIntel(false);
+                                        // Kick off audit flow through parent
+                                        onStartAudit({
+                                            name: pendingBusiness.name,
+                                            website: (extraDetails.website || pendingBusiness.website),
+                                            address: pendingBusiness.address,
+                                            websiteContent: intelData,
+                                            notes: extraDetails.notes,
+                                            location: extraDetails.location,
+                                            industry: extraDetails.industry
+                                        });
+                                        setPendingBusiness(null);
+                                    } catch (e:any) {
+                                        setIsFetchingIntel(false);
+                                        setToast({ message: e?.message || 'Failed to fetch website details' });
+                                    }
+                                }}
+                                disabled={isFetchingIntel}
+                            >
+                                {isFetchingIntel ? 'Analyzing site…' : 'Create & Run Audit'}
+                            </button>
+                            <button className="btn" onClick={()=>{ setPendingBusiness(null); setExtraDetails({}); }}>Cancel</button>
+                        </div>
+                        {intel && (
+                            <div style={{marginTop:8, fontSize:12, maxHeight:150, overflow:'auto'}}>
+                                <strong>Website signals:</strong>
+                                {intel.title && <div>Title: {intel.title}</div>}
+                                {intel.description && <div>Desc: {intel.description}</div>}
+                                {!!(intel.h1||[]).length && <div>H1: {(intel.h1||[]).slice(0,2).join(' | ')}</div>}
+                            </div>
+                        )}
+                    </div>
+                )}
                 {showUpdatePrompt && (
                     <div style={{
                         position: 'absolute',

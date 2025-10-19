@@ -19,6 +19,8 @@ interface Business {
     id?: string; // Client's Firestore document ID
     name: string;
     website?: string;
+    address?: string;
+    websiteContent?: any;
 }
 
 interface Profile extends Business {
@@ -490,6 +492,8 @@ async function authHeader() {
 const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientId: string) => Promise<void>; }> = ({ business, onSaveAudit }) => {
     const [businessName, setBusinessName] = useState(business?.name || '');
     const [websiteUrl, setWebsiteUrl] = useState(business?.website || '');
+    const [industry, setIndustry] = useState('');
+    const [location, setLocation] = useState('');
     const [report, setReport] = useState('');
     const [isAuditing, setIsAuditing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -523,6 +527,9 @@ const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientI
                 result = await localAI.performSEOAnalysis({
                     businessName,
                     website: websiteUrl,
+                    location,
+                    industry,
+                    websiteContent: business?.websiteContent
                 });
                 setReport(result.analysis || result.text || 'No analysis generated');
             } else {
@@ -588,6 +595,26 @@ const AuditView: FC<{ business?: Business; onSaveAudit: (report: string, clientI
                         placeholder="https://www.joespizzadt.com"
                         value={websiteUrl}
                         onChange={(e) => setWebsiteUrl(e.target.value)}
+                    />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="business-location">Location</label>
+                    <input
+                        type="text"
+                        id="business-location"
+                        placeholder="City, State"
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                    />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="business-industry">Industry</label>
+                    <input
+                        type="text"
+                        id="business-industry"
+                        placeholder="e.g., Restaurant, Plumbing"
+                        value={industry}
+                        onChange={(e) => setIndustry(e.target.value)}
                     />
                 </div>
                 <button className="btn btn-primary" onClick={handleStartAudit} disabled={isAuditing || !businessName}>
@@ -1528,8 +1555,8 @@ const App: FC = () => {
         }
     }, []);
 
-    const handleStartAudit = (business: { name: string; website?: string }) => {
-        setAuditTarget(business);
+    const handleStartAudit = (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string }) => {
+        setAuditTarget(business as Business);
         setView('AUDIT');
     };
 
