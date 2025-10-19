@@ -1,0 +1,24 @@
+{
+  "test123": [
+    {
+      "role": "user",
+      "content": "hi",
+      "ts": 1760870058724
+    },
+    {
+      "role": "assistant",
+      "content": "✨ Got it. You said: \"hi\". I might be a bit off—mind clarifying what you want?\n\nKnowledge I can use:\n• From: README.md\n\nNext steps:\n• Run a quick audit to benchmark your local presence\n• Draft an outreach email for new leads\n• Generate 3 SEO-optimized post ideas\n\nWhat do you want to tackle next?",
+      "ts": 1760870058724
+    },
+    {
+      "role": "user",
+      "content": "hi",
+      "ts": 1760870101586
+    },
+    {
+      "role": "assistant",
+      "content": "✨ Got it. You said: \"hi\". I might be a bit off—mind clarifying what you want?\n\nKnowledge I can use:\n• From: README.md\n• From: call_eyJ0eXBlIjoi.json\n\nNext steps:\n• Run a quick audit to benchmark your local presence\n• Draft an outreach email for new leads\n• Generate 3 SEO-optimized post ideas\n\nWhat do you want to tackle next?",
+      "ts": 1760870101586
+    }
+  ]
+}

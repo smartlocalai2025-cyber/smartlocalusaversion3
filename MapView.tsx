@@ -88,8 +88,9 @@ interface MapViewProps {
 }
 
 // --- Constants ---
-// Using the API key from the firebase config.
+// Using the API key from the env; optional Map ID for styled maps
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+const MAPS_MAP_ID = (import.meta as any)?.env?.VITE_GOOGLE_MAPS_MAP_ID as string | undefined;
 
 // Default businesses to always show on the map
 const DEFAULT_BUSINESSES = [
@@ -317,15 +318,26 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
     const showBusinessesInBoundsRef = useRef<null | ((centerOverride?: any) => void)>(null);
     const initMap = (google: typeof window.google, lat?: number, lng?: number, useLocation?: boolean) => {
         if (!mapRef.current || !searchInputRef.current) return;
+        if (!google || !(google as any).maps) {
+            setError('Google Maps failed to initialize. Please check API key and network.');
+            return;
+        }
 
         const center = lat && lng ? { lat, lng } : { lat: 34.0522, lng: -118.2437 };
-        mapInstance.current = new google.maps.Map(mapRef.current, {
+        const mapOptions: any = {
             center,
             zoom: 12,
-            mapId: 'SMART_LOCAL_AI_MAP',
-        });
-        placesService.current = new google.maps.places.PlacesService(mapInstance.current);
-        infoWindow.current = new google.maps.InfoWindow();
+        };
+        if (MAPS_MAP_ID && typeof MAPS_MAP_ID === 'string' && MAPS_MAP_ID.trim().length > 0) {
+            mapOptions.mapId = MAPS_MAP_ID.trim();
+        }
+        mapInstance.current = new google.maps.Map(mapRef.current, mapOptions);
+        try {
+            placesService.current = new google.maps.places.PlacesService(mapInstance.current);
+            infoWindow.current = new google.maps.InfoWindow();
+        } catch (e) {
+            console.error('Failed to init Places/InfoWindow:', e);
+        }
 
         // Only show businesses once after initial center
         hasLoadedBusinesses.current = false;
