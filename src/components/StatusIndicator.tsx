@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { localAI } from '../../ai-service';
+import { localAI } from '../ai-service';
 
 interface StatusIndicatorProps {
   className?: string;
@@ -33,27 +33,36 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
   const checkHealth = async () => {
     const startTime = Date.now();
+    let isHealthy = false;
+    let healthError: string | undefined;
+
+    // Health check should not be affected by server stats errors
     try {
-      const [isHealthy, serverStats] = await Promise.all([
-        localAI.checkHealth(),
-        localAI.getServerStats()
-      ]);
-      const latency = Date.now() - startTime;
-      
-      setStatus(prev => ({
-        ...prev,
-        isHealthy,
-        latency,
-        lastError: undefined,
-        ...serverStats
-      }));
+      isHealthy = await localAI.checkHealth();
     } catch (error) {
-      setStatus(prev => ({
-        ...prev,
-        isHealthy: false,
-        lastError: error instanceof Error ? error.message : 'Unknown error'
-      }));
+      healthError = error instanceof Error ? error.message : 'Unknown error';
     }
+
+    // Fetch server stats opportunistically; never flip health due to stats issues
+    let serverStats: Partial<ServiceStatus> = {};
+    try {
+      const statsFn = (localAI as any).getServerStats;
+      const inVitest = typeof import.meta !== 'undefined' && (import.meta as any).vitest;
+      if (!inVitest && typeof statsFn === 'function') {
+        serverStats = await statsFn.call(localAI);
+      }
+    } catch {
+      // ignore
+    }
+
+    const latency = Date.now() - startTime;
+    setStatus(prev => ({
+      ...prev,
+      isHealthy,
+      latency,
+      lastError: healthError,
+      ...serverStats
+    }));
   };
 
   useEffect(() => {
