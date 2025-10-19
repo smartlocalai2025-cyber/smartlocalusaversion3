@@ -22,7 +22,7 @@ export type User = FirebaseUser;
 // These variables should be set in a `.env.local` file at the root of the project.
 // Example: VITE_FIREBASE_API_KEY="AIza..."
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, setPersistence, browserLocalPersistence, onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut as firebaseSignOut, setPersistence, browserLocalPersistence, onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import { getFirestore, collection, addDoc, query, where, orderBy, getDocs } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getAnalytics } from "firebase/analytics";
@@ -88,14 +88,12 @@ if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("xxxxxxxxxx")) {
 // --- Authentication Functions ---
 const provider = new GoogleAuthProvider();
 
-import { signInWithRedirect } from "firebase/auth";
 
 const signInWithGoogle = async () => {
     try {
         await signInWithPopup(auth, provider);
     } catch (error: any) {
         console.error("Google Sign-In Error:", error);
-        // Fallback to redirect if popup fails or is blocked
         if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
             try {
                 await signInWithRedirect(auth, provider);
