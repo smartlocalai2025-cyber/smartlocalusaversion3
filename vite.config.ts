@@ -5,7 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base: '/',
+      // Allow GitHub Pages deployments to serve under a subpath (repo name)
+      // Set VITE_BASE in CI to e.g. "/smartlocalusaversion3/"; defaults to "/" for local/dev/Firebase Hosting.
+      base: env.VITE_BASE || '/',
       server: {
         port: 3000,
         host: '0.0.0.0',
