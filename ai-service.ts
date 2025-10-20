@@ -76,11 +76,12 @@ class LocalAIService {
   // Prefer explicit env URL when provided. In dev, omit baseUrl so calls hit Vite proxy /api -> 3001.
   // In production (Firebase Hosting), rewrites route /api/** to Cloud Run service. Keep baseUrl empty for relative calls.
   this.baseUrl = envUrl || '';
+    // OpenAI is the sole brain (Morrow.AI); optional providers: gemini (helper)
     const savedProvider = (typeof localStorage !== 'undefined' && localStorage.getItem('ai.provider')) as AIProviderName | null;
-    const provider = (savedProvider || (import.meta.env.VITE_DEFAULT_AI_PROVIDER as AIProviderName) || 'claude') as AIProviderName;
+    const provider = (savedProvider || (import.meta.env.VITE_DEFAULT_AI_PROVIDER as AIProviderName) || 'openai') as AIProviderName;
     this.defaultOptions = {
       provider,
-      model: (typeof localStorage !== 'undefined' && localStorage.getItem('ai.model')) || (import.meta.env.VITE_DEFAULT_AI_MODEL as string) || 'claude-3-sonnet-20240229',
+      model: (typeof localStorage !== 'undefined' && localStorage.getItem('ai.model')) || (import.meta.env.VITE_DEFAULT_AI_MODEL as string) || 'gpt-4o-mini',
     };
     this.rateLimiter = {
       requests: 0,
@@ -423,6 +424,16 @@ class LocalAIService {
     return response as any;
   }
 
+  // Agent (OpenAI-first) ask
+  async agentAsk(prompt: string, toolsAllow?: string[], options: AIServiceOptions = {}): Promise<{
+    final_text: string;
+    tool_trace: Array<any>;
+    model: string;
+    provider: string;
+  }> {
+    return this.request('/api/agent/ask', { prompt, toolsAllow }, options) as unknown as any;
+  }
+
   // Get available features
   async getFeatures(): Promise<any> {
     const response = await fetch(`${this.baseUrl}/api/features`);
@@ -461,7 +472,7 @@ class LocalAIService {
   }
 
   getProvider(): string {
-    return this.defaultOptions.provider || 'claude';
+    return this.defaultOptions.provider || 'openai';
   }
 
   getActiveProvider(): string {
@@ -469,7 +480,7 @@ class LocalAIService {
   }
 
   getModel(): string {
-    return this.defaultOptions.model || 'claude-3-sonnet-20240229';
+    return this.defaultOptions.model || 'gpt-4o-mini';
   }
 
   setProvider(provider: AIProviderName) {

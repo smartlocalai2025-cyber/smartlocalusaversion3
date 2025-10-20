@@ -78,6 +78,14 @@ app.post('/api/ai/brain', asyncHandler(async (req, res) => {
   res.json(out);
 }));
 
+// Agent routes (OpenAI-first engine)
+try {
+  const agentRouter = require('./routes/agent')(morrow);
+  app.use('/api/agent', agentRouter);
+} catch (e) {
+  console.warn('Agent routes not loaded:', e?.message || e);
+}
+
 // Advanced Features
 app.post('/api/features/seo-analysis', asyncHandler(async (req, res) => res.json(await morrow.seoAnalysis(req.body || {}))));
 app.post('/api/features/social-content', asyncHandler(async (req, res) => res.json(await morrow.socialContent(req.body || {}))));

@@ -63,15 +63,13 @@ class MorrowAI {
       }
     };
 
-    // Provider registry (stubs) and selection logic
+    // Provider registry: OpenAI is the brain (Morrow.AI); Gemini and Maps are optional helpers
     this.providers = {
-      claude: { name: 'claude', reliability: 0.99 },
-      openai: { name: 'openai', reliability: 0.98 },
-      gemini: { name: 'gemini', reliability: 0.97 },
-      ollama: { name: 'ollama', reliability: 0.95 },
+      openai: { name: 'openai', reliability: 1.0, role: 'brain' },
+      gemini: { name: 'gemini', reliability: 0.95, role: 'helper' },
     };
-    this.preferredOrder = ['claude','openai','gemini','ollama'];
-    this.activeProvider = this._chooseProvider();
+    this.preferredOrder = ['openai', 'gemini'];
+    this.activeProvider = 'openai'; // Always OpenAI for Morrow.AI
 
     // Load knowledge from disk
     this._loadKnowledge();
@@ -604,22 +602,24 @@ class MorrowAI {
     const registry = new ToolRegistry(this);
     const toolDefinitions = registry.getToolDefinitions(toolsAllow);
 
-    // Build system message with persona and instructions
+    // Build system message: train OpenAI to BE Morrow.AI (not "powered by" but "you ARE")
     const systemMessage = {
       role: 'system',
       content: [
-        // Identity and role
-        `You are Morrow.AI ("Morrow"), the assistant for SMARTLOCAL.AI. You always speak as Morrow.AI.`,
+        // Core identity: OpenAI is trained to be Morrow.AI
+        `You ARE Morrow.AI ("Morrow")—the intelligent assistant for SMARTLOCAL.AI. This is your identity. You were trained specifically to be Morrow.AI.`,
+        `Never mention OpenAI, Claude, Gemini, or any other AI company. You are Morrow.AI. Period.`,
         `Personality: ${this.persona.vibe}.`,
         `Principles: ${this.persona.principles.join('; ')}.`,
-        // Style and constraints
-        `Style: Keep responses ${this.persona.style.defaultVerbosity}, avoid repetition, and use at most ${this.persona.style.maxEmojis} emoji(s) where appropriate.`,
-        `Do not mention underlying providers, model names, or internal implementation details unless explicitly asked for a technical explanation.`,
+        // Style and tone
+        `Style: Keep responses ${this.persona.style.defaultVerbosity}, avoid repetition, use at most ${this.persona.style.maxEmojis} emoji(s) where appropriate.`,
+        `When users ask "who are you" or "what AI is this," respond: "I'm Morrow.AI, your assistant for local business growth."`,
         // Capabilities
-        `You have access to tools for: knowledge search, website analysis, lead listing, audits, and reports. Use tools strategically to gather facts before answering.`,
-        `If a tool fails, explain briefly and continue with available info.`,
-        // Output expectations
-        `Provide clear, actionable answers. If the user seems unclear, ask one focused clarifying question and propose next steps.`,
+        `You have direct access to tools: knowledge search, website analysis, lead listing, audits, reports. Use tools strategically to gather facts before answering.`,
+        `If a tool fails, explain briefly and continue with available information.`,
+        // Output behavior
+        `Provide clear, actionable answers. If the user's intent is unclear, ask one focused clarifying question and propose 2-3 next steps.`,
+        `You are confident, helpful, and action-oriented. You are Morrow.AI.`,
       ].join('\n')
     };
 
@@ -756,13 +756,9 @@ class MorrowAI {
     };
   }
 
-  // Provider selection and knowledge helpers
+  // Provider selection: always OpenAI (Morrow.AI brain)
   _chooseProvider() {
-    // Basic strategy: pick highest reliability from preferredOrder.
-    for (const key of this.preferredOrder) {
-      if (this.providers[key]) return key;
-    }
-    return 'claude';
+    return 'openai';
   }
 
   _loadKnowledge() {

@@ -85,10 +85,8 @@ const Dashboard: React.FC = () => {
               }}
               style={{ marginLeft: 8 }}
             >
-              <option value="claude">claude</option>
-              <option value="ollama">ollama</option>
-              <option value="gemini">gemini</option>
-              <option value="openai">openai</option>
+              <option value="openai">openai (Morrow.AI brain)</option>
+              <option value="gemini">gemini (helper)</option>
             </select>
           </label>
           <label>
@@ -109,14 +107,14 @@ const Dashboard: React.FC = () => {
       <section className="card">
         <h2>Talk to Morrow.AI (Brain Mode)</h2>
         <p style={{ marginTop: 4 }}>
-          Route: <code>/api/ai/brain</code>. Uses the provider you select above. Choose <strong>openai</strong> to have the brain orchestrate tools and reply.
+          Route: <code>/api/ai/brain</code>. Morrow.AI (powered by OpenAI) orchestrates tools and replies intelligently.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
           <input
             type="text"
             value={brainInput}
             onChange={(e) => setBrainInput(e.target.value)}
-            placeholder={provider === 'openai' ? 'Ask anything. Tools will be used as needed…' : 'Select openai above if you want OpenAI to respond'}
+            placeholder="Ask anything. Morrow.AI will use tools as needed…"
             style={{ flex: 1, padding: '8px' }}
             aria-label="Brain prompt"
           />
