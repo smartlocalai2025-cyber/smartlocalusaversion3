@@ -21,7 +21,10 @@ const Dashboard: React.FC = () => {
   const [assistantInput, setAssistantInput] = useState<string>('');
   const [assistantBusy, setAssistantBusy] = useState<boolean>(false);
   const [assistantAnswer, setAssistantAnswer] = useState<string>('');
+  const [assistantStreaming, setAssistantStreaming] = useState<boolean>(false);
+  const [assistantStreamText, setAssistantStreamText] = useState<string>('');
   const [now, setNow] = useState<string>(new Date().toLocaleString());
+  const [streamByDefault, setStreamByDefault] = useState<boolean>(false);
 
   useEffect(() => {
     const load = async () => {
@@ -106,6 +109,16 @@ const Dashboard: React.FC = () => {
             />
           </label>
         </div>
+        <div style={{ marginTop: 8 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={streamByDefault}
+              onChange={(e) => setStreamByDefault(e.target.checked)}
+            />
+            Stream replies by default
+          </label>
+        </div>
       </section>
       <section className="card">
         <h2>Talk to Morrow.AI (Brain Mode)</h2>
@@ -123,20 +136,31 @@ const Dashboard: React.FC = () => {
           />
           <button
             onClick={async () => {
-              setBrainBusy(true); setBrainAnswer(''); setError(''); setBrainTraceCount(0);
-              try {
-                const res: any = await (localAI as any).brain(
+              if (streamByDefault) {
+                setBrainStreaming(true); setBrainStreamText(''); setError('');
+                const handle = (localAI as any).brainStream(
                   brainInput,
                   undefined,
-                  provider as any,
-                  model || undefined
+                  model || undefined,
+                  (delta: string) => setBrainStreamText(prev => prev + delta)
                 );
-                setBrainAnswer(res?.final_text || '');
-                setBrainTraceCount(Array.isArray(res?.tool_trace) ? res.tool_trace.length : 0);
-              } catch (e: any) {
-                setError(e?.message || 'Brain request failed');
-              } finally {
-                setBrainBusy(false);
+                setTimeout(() => { try { handle.close(); } catch {} setBrainStreaming(false); }, 20000);
+              } else {
+                setBrainBusy(true); setBrainAnswer(''); setError(''); setBrainTraceCount(0);
+                try {
+                  const res: any = await (localAI as any).brain(
+                    brainInput,
+                    undefined,
+                    provider as any,
+                    model || undefined
+                  );
+                  setBrainAnswer(res?.final_text || '');
+                  setBrainTraceCount(Array.isArray(res?.tool_trace) ? res.tool_trace.length : 0);
+                } catch (e: any) {
+                  setError(e?.message || 'Brain request failed');
+                } finally {
+                  setBrainBusy(false);
+                }
               }
             }}
             disabled={brainBusy || !brainInput.trim()}
@@ -186,7 +210,7 @@ const Dashboard: React.FC = () => {
       <section className="card">
         <h2>Talk to Morrow.AI (Assistant)</h2>
         <p style={{ marginTop: 4 }}>
-          Route: <code>/api/ai/assistant</code>. Morrow.AI uses its full brain here for conversational answers.
+          Route: <code>/api/ai/assistant</code>. Uses brain logic for conversational answers. You can stream live tokens below.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
           <input
@@ -199,15 +223,26 @@ const Dashboard: React.FC = () => {
           />
           <button
             onClick={async () => {
-              setAssistantBusy(true); setAssistantAnswer(''); setError('');
-              try {
-                const res: any = await localAI.askAssistant(assistantInput, undefined, undefined, { provider: provider as any, model: model || undefined });
-                const answer = res?.response || res?.text || res?.analysis || res?.report || '';
-                setAssistantAnswer(answer);
-              } catch (e: any) {
-                setError(e?.message || 'Assistant request failed');
-              } finally {
-                setAssistantBusy(false);
+              if (streamByDefault) {
+                setAssistantStreaming(true); setAssistantStreamText(''); setError('');
+                const handle = (localAI as any).brainStream(
+                  assistantInput,
+                  undefined,
+                  model || undefined,
+                  (delta: string) => setAssistantStreamText(prev => prev + delta)
+                );
+                setTimeout(() => { try { handle.close(); } catch {} setAssistantStreaming(false); }, 20000);
+              } else {
+                setAssistantBusy(true); setAssistantAnswer(''); setError('');
+                try {
+                  const res: any = await localAI.askAssistant(assistantInput, undefined, undefined, { provider: provider as any, model: model || undefined });
+                  const answer = res?.response || res?.text || res?.analysis || res?.report || '';
+                  setAssistantAnswer(answer);
+                } catch (e: any) {
+                  setError(e?.message || 'Assistant request failed');
+                } finally {
+                  setAssistantBusy(false);
+                }
               }
             }}
             disabled={assistantBusy || !assistantInput.trim()}
@@ -215,6 +250,29 @@ const Dashboard: React.FC = () => {
           >
             {assistantBusy ? 'Answering…' : 'Ask Morrow.AI'}
           </button>
+        </div>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => {
+              setAssistantStreaming(true); setAssistantStreamText(''); setError('');
+              const text = assistantInput;
+              const handle = (localAI as any).brainStream(
+                text,
+                undefined,
+                model || undefined,
+                (delta: string) => setAssistantStreamText(prev => prev + delta)
+              );
+              setTimeout(() => { try { handle.close(); } catch {} setAssistantStreaming(false); }, 20000);
+            }}
+            disabled={assistantStreaming || !assistantInput.trim()}
+          >
+            {assistantStreaming ? 'Streaming…' : 'Stream Reply'}
+          </button>
+          {assistantStreaming && (
+            <button onClick={() => { setAssistantStreaming(false); setAssistantStreamText(''); }}>
+              Stop
+            </button>
+          )}
         </div>
         {(assistantAnswer || error) && (
           <div style={{ marginTop: 12 }}>
@@ -225,6 +283,9 @@ const Dashboard: React.FC = () => {
             )}
             {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
           </div>
+        )}
+        {assistantStreamText && (
+          <pre style={{ marginTop: 8, padding: 8, background: '#f6f8fa', whiteSpace: 'pre-wrap' }}>{assistantStreamText}</pre>
         )}
       </section>
       <section>
