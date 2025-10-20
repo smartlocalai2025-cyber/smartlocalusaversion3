@@ -1,5 +1,5 @@
-# Use Node.js LTS
-FROM node:18-slim
+# Use Node.js LTS (20.x required for undici dependency)
+FROM node:20-slim
 WORKDIR /app
 COPY package.json ./
 RUN npm install --production
