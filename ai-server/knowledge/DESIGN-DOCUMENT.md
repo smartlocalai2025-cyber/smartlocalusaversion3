@@ -27,7 +27,7 @@
 
 ## Executive Summary
 
-**SMARTLOCAL.AI** is an AI-powered SaaS platform designed to revolutionize how consultants deliver local SEO, digital marketing, and business intelligence services to small and medium businesses. The platform combines cutting-edge AI technology with intuitive consultant tools and white-label customer portals to create a comprehensive, scalable solution for digital marketing consultants.
+**Morrow.AI** is an AI-powered SaaS platform designed to revolutionize how consultants deliver local SEO, digital marketing, and business intelligence services to small and medium businesses. The platform combines cutting-edge AI technology with intuitive consultant tools and white-label customer portals to create a comprehensive, scalable solution for digital marketing consultants.
 
 ### Key Value Propositions
 - **For Consultants**: Automated client onboarding, AI-powered audits, personalized customer portals, and streamlined communication
@@ -56,9 +56,9 @@
 
 ## Product Overview
 
-### What SMARTLOCAL.AI Does
+### What Morrow.AI Does
 
-SMARTLOCAL.AI is a dual-sided platform:
+Morrow.AI is a dual-sided platform:
 
 #### Consultant Dashboard (Main Application)
 - Client onboarding and profile management

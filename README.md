@@ -2,9 +2,9 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# SmartLocal USA AI Assistant
+# SMARTLOCAL.AI — Webapp + Morrow.AI Companion
 
-A powerful local-first AI assistant using multiple providers including Claude Sonnet 3.5 for enhanced performance and privacy.
+SMARTLOCAL.AI is the platform. Morrow.AI is the built-in companion that powers audits, insights, and chat.
 
 View your app in AI Studio: https://ai.studio/apps/drive/13R4fDxC_pdM0tIOgMSQC9Wz_PWGdsEFB
 
@@ -23,15 +23,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/13R4fDxC_pdM0tIOgMSQC9W
    GEMINI_API_KEY=your_gemini_api_key
    VITE_ADMIN_EMAIL=your_admin_email
 
-   # Optional - Claude Configuration (defaults shown)
-   VITE_LOCAL_AI_URL=http://localhost:3001
-   VITE_DEFAULT_AI_PROVIDER=claude
-   VITE_DEFAULT_AI_MODEL=claude-3-sonnet-20240229
+  # Frontend defaults
+  VITE_LOCAL_AI_URL=http://localhost:3001
+  VITE_DEFAULT_AI_PROVIDER=openai
+  VITE_DEFAULT_AI_MODEL=gpt-4o-mini
    VITE_REQUEST_TIMEOUT=30000
    VITE_MAX_RETRIES=2
 
-   # Optional - Brain Mode (OpenAI-driven tool orchestration)
-   OPENAI_API_KEY=your_openai_api_key
+  # Brain Mode (OpenAI-driven tool orchestration)
+  OPENAI_API_KEY=your_openai_api_key
    ```
 
 3. Start development:
@@ -52,8 +52,7 @@ smartlocalusaversion3/
 │   ├── services/      # API services including AI
 │   └── __tests__/    # Test files
 ├── ai-server/         # Local AI server
-├── functions/         # Firebase Functions
-└── dist/             # Production build
+└── dist/              # Production build
 ```
 
 ## 🧪 Testing
@@ -143,7 +142,7 @@ Our workflow uploads the `dist` folder as the Pages artifact and then deploys it
 ```typescript
 import { localAI } from './services/ai-service';
 
-// Chat with Claude
+// Chat with Morrow.AI (OpenAI under-the-hood)
 const response = await localAI.chat('Your prompt');
 
 // Generate content
