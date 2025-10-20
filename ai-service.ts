@@ -470,6 +470,32 @@ class LocalAIService {
     return response as any;
   }
 
+  // Brain streaming via SSE
+  brainStream(
+    prompt: string,
+    conversationId?: string,
+    model?: string,
+    onDelta?: (delta: string) => void
+  ): { close: () => void } {
+    const params = new URLSearchParams();
+    params.set('prompt', prompt);
+    if (conversationId) params.set('conversationId', conversationId);
+    if (model) params.set('model', model);
+    const url = `${this.baseUrl}/api/ai/brain/stream?${params.toString()}`;
+    const es = new EventSource(url);
+    es.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data?.delta && onDelta) onDelta(data.delta);
+        if (data?.error) console.warn('brainStream error:', data.error);
+      } catch {}
+    };
+    es.onerror = () => {
+      try { es.close(); } catch {}
+    };
+    return { close: () => { try { es.close(); } catch {} } };
+  }
+
   // Agent (OpenAI-first) ask
   async agentAsk(prompt: string, toolsAllow?: string[], options: AIServiceOptions = {}): Promise<{
     final_text: string;

@@ -253,16 +253,38 @@ class MorrowAI {
     this._learnFromUser(fullPrompt || prompt);
 
     const emoji = this._maybeEmoji(tone);
-    const lead = tone === 'urgent' ? 'On it' : tone === 'high-energy' ? 'Let\'s go' : tone === 'casual' ? 'Gotcha' : 'Got it';
-    const bullet = this.persona?.style?.bulletPrefix || '-';
-    const knowledgeLines = (snippets || []).slice(0,3).map(s => `${bullet} From: ${s.title}`);
-    const knowledgeBlock = knowledgeLines.length ? `\n\nKnowledge I can use:\n${knowledgeLines.join('\n')}` : '';
-    const clarifier = ambiguous ? `Quick clarifier: What\'s the main goal you want here?` : '';
-    const sug = suggestions && suggestions.length ? `\n\nNext steps:\n${suggestions.slice(0,3).map(s=>`${bullet} ${s}`).join('\n')}` : '';
+    const lead = tone === 'urgent' ? 'On it' : tone === 'high-energy' ? "Let’s roll" : tone === 'casual' ? 'Love it' : 'Got you';
     const tail = this.persona?.style?.signoff ? `\n\n${this.persona.style.signoff}` : '';
 
-    const raw = `${emoji ? emoji + ' ' : ''}${lead}. You said: "${fullPrompt || prompt}". ${clarifier}${knowledgeBlock}${sug}${tail}`.trim();
-    return this._reduceRepetition(raw);
+    // If the message is ambiguous (e.g., "hi", "hello"), reply with a friendly, enthusiastic line
+    const txt = String(fullPrompt || prompt || '').trim();
+    const isGreeting = /^(hi|hey|hello|yo|sup|hiya|howdy|heya|hola|hiya there)\b/i.test(txt);
+    if (ambiguous || isGreeting) {
+      const greetings = [
+        "Hey there—I'm Morrow.AI. Pumped to help. Give me a hint and I’ll dive in.",
+        "Hi! I’m Morrow.AI—thrilled to jump in. What should we tackle first?",
+        "Hello! Morrow.AI here—ready to move mountains for you. What’s on your mind?",
+        "Yo! Morrow.AI in the house—say the word and I’ll get to work.",
+        "Hey! I’m Morrow.AI. Fired up and ready—what are we building today?",
+        "Howdy! Morrow.AI at your service. Point me at a goal and I’ll sprint.",
+        "Hey hey! It’s Morrow.AI. What’s the mission?",
+        "Hi there! Morrow.AI reporting for duty. Where should we begin?",
+        "Hello hello! I’m Morrow.AI—let’s make something awesome happen.",
+        "What’s up! Morrow.AI here. Drop me a clue and I’ll take it from there.",
+        "Great to see you! I’m Morrow.AI. Ready when you are.",
+        "Let’s go! I’m Morrow.AI—give me a target and I’ll execute.",
+        "Hey friend! Morrow.AI on deck. What can I do for you right now?",
+        "Morrow.AI here—energized and focused. What’s the next move?",
+        "Hi! I’m Morrow.AI—your growth sidekick. What are we tackling today?"
+      ];
+      const pick = greetings[Math.floor(Math.random() * greetings.length)];
+      const cool = `${emoji ? emoji + ' ' : ''}${pick}`;
+      return this._reduceRepetition((cool + tail).trim());
+    }
+
+    // Conversational reflection without sounding robotic
+    const friendly = `${emoji ? emoji + ' ' : ''}${lead} — I’m on it. Let’s tackle: "${txt}".`;
+    return this._reduceRepetition((friendly + tail).trim());
   }
 
   // Reduce repeated lines/phrases to keep voice fresh and friendly
@@ -363,12 +385,8 @@ class MorrowAI {
       const tone = this._inferTone(prompt);
       const snippets = this._searchKnowledge(prompt, 3, 500);
       const ambiguous = this._isAmbiguous(prompt);
-      const suggestions = [
-        'Run a quick audit to benchmark your local presence',
-        'Draft an outreach email for new leads',
-        'Generate 3 SEO-optimized post ideas'
-      ];
-      const response = this._companionReply({ prompt, fullPrompt: prompt, snippets, tone, ambiguous, suggestions });
+      // No suggestion list — keep it conversational and friendly
+      const response = this._companionReply({ prompt, fullPrompt: prompt, snippets, tone, ambiguous, suggestions: [] });
       this._pushMessage(convId, 'user', prompt);
       this._pushMessage(convId, 'assistant', response);
       return {
@@ -388,16 +406,8 @@ class MorrowAI {
       const tone = this._inferTone(fullPrompt);
       const snippets = this._searchKnowledge(fullPrompt, 3, 500);
       const ambiguous = this._isAmbiguous(fullPrompt);
-      let suggestions = [
-        'Start a full business audit',
-        'Run a local SEO analysis',
-        'Generate a 30-day content calendar'
-      ];
-      const fp = fullPrompt.toLowerCase();
-      if (fp.includes('audit')) suggestions.unshift('Kick off an audit with your business name and website');
-      if (fp.includes('seo')) suggestions.unshift('Perform a detailed SEO check (GBP, citations, on-page)');
-      if (fp.includes('competitor')) suggestions.unshift('Run a competitor analysis for your city and niche');
-      const response = this._companionReply({ prompt, fullPrompt, snippets, tone, ambiguous, suggestions });
+      // Keep assistant chat warm and human without prescribing next steps
+      const response = this._companionReply({ prompt, fullPrompt, snippets, tone, ambiguous, suggestions: [] });
       this._pushMessage(convId, 'user', fullPrompt);
       this._pushMessage(convId, 'assistant', response);
       return {

@@ -15,6 +15,8 @@ const Dashboard: React.FC = () => {
   const [brainBusy, setBrainBusy] = useState<boolean>(false);
   const [brainAnswer, setBrainAnswer] = useState<string>('');
   const [brainTraceCount, setBrainTraceCount] = useState<number>(0);
+  const [brainStreaming, setBrainStreaming] = useState<boolean>(false);
+  const [brainStreamText, setBrainStreamText] = useState<string>('');
   // Assistant chat state (non-brain)
   const [assistantInput, setAssistantInput] = useState<string>('');
   const [assistantBusy, setAssistantBusy] = useState<boolean>(false);
@@ -108,7 +110,7 @@ const Dashboard: React.FC = () => {
       <section className="card">
         <h2>Talk to Morrow.AI (Brain Mode)</h2>
         <p style={{ marginTop: 4 }}>
-          Route: <code>/api/ai/brain</code>. Morrow.AI (powered by OpenAI) orchestrates tools and replies intelligently.
+          Route: <code>/api/ai/brain</code>. Morrow.AI orchestrates tools and replies intelligently.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
           <input
@@ -154,11 +156,37 @@ const Dashboard: React.FC = () => {
             {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
           </div>
         )}
+        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => {
+              setBrainStreaming(true); setBrainStreamText(''); setError('');
+              const handle = (localAI as any).brainStream(
+                brainInput,
+                undefined,
+                model || undefined,
+                (delta: string) => setBrainStreamText(prev => prev + delta)
+              );
+              // Stop after 20s as a safety (frontend)
+              setTimeout(() => { try { handle.close(); } catch {} setBrainStreaming(false); }, 20000);
+            }}
+            disabled={brainStreaming || !brainInput.trim()}
+          >
+            {brainStreaming ? 'Streaming…' : 'Stream Reply'}
+          </button>
+          {brainStreaming && (
+            <button onClick={() => { setBrainStreaming(false); setBrainStreamText(''); }}>
+              Stop
+            </button>
+          )}
+        </div>
+        {brainStreamText && (
+          <pre style={{ marginTop: 8, padding: 8, background: '#f6f8fa', whiteSpace: 'pre-wrap' }}>{brainStreamText}</pre>
+        )}
       </section>
       <section className="card">
         <h2>Talk to Morrow.AI (Assistant)</h2>
         <p style={{ marginTop: 4 }}>
-          Route: <code>/api/ai/assistant</code>. This is a guided assistant chat without tool orchestration.
+          Route: <code>/api/ai/assistant</code>. Morrow.AI uses its full brain here for conversational answers.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
           <input

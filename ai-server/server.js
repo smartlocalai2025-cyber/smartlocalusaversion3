@@ -55,13 +55,34 @@ app.post('/api/knowledge/refresh', asyncHandler(async (req, res) => {
 }));
 
 // AI Core
+// Chat: route through brain (OpenAI logic) for conversational responses
 app.post('/api/ai/chat', asyncHandler(async (req, res) => {
-  const out = await morrow.chat(req.body || {});
-  res.json(out);
+  const { prompt, conversationId, provider, model, toolsAllow, limits } = req.body || {};
+  const out = await morrow.brain({
+    prompt,
+    conversationId,
+    provider: provider || 'openai',
+    model,
+    toolsAllow,
+    limits
+  });
+  // Keep backward-compatible shape with a `response` field
+  res.json({ ...out, response: out.final_text });
 }));
+
+// Assistant: also use brain, optionally prepending context
 app.post('/api/ai/assistant', asyncHandler(async (req, res) => {
-  const out = await morrow.assistant(req.body || {});
-  res.json(out);
+  const { prompt, context, conversationId, provider, model, toolsAllow, limits } = req.body || {};
+  const fullPrompt = context ? `[Context:${context}] ${prompt}` : prompt;
+  const out = await morrow.brain({
+    prompt: fullPrompt,
+    conversationId,
+    provider: provider || 'openai',
+    model,
+    toolsAllow,
+    limits
+  });
+  res.json({ ...out, response: out.final_text });
 }));
 app.post('/api/ai/generate', asyncHandler(async (req, res) => {
   const out = await morrow.generate(req.body || {});
@@ -76,6 +97,57 @@ app.post('/api/ai/image', asyncHandler(async (req, res) => {
 app.post('/api/ai/brain', asyncHandler(async (req, res) => {
   const out = await morrow.brain(req.body || {});
   res.json(out);
+}));
+
+// Brain streaming via SSE: incremental tokens from OpenAI
+app.get('/api/ai/brain/stream', asyncHandler(async (req, res) => {
+  // Setup SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+
+  const prompt = req.query.prompt || '';
+  const conversationId = req.query.conversationId || undefined;
+  const model = req.query.model || undefined;
+  const provider = 'openai';
+
+  // Prepare OpenAI client
+  try {
+    const { OpenAIAdapter } = require('./providers/openai');
+    const adapter = new OpenAIAdapter({ apiKey: process.env.OPENAI_API_KEY });
+    if (!adapter.isConfigured()) throw new Error('OpenAI not configured');
+
+    // Build messages using the same system identity as brain()
+    const messages = [
+      { role: 'system', content: `You ARE Morrow.AI ("Morrow"). Be enthusiastic, clear, and action-oriented.` },
+      { role: 'user', content: String(prompt || '') }
+    ];
+
+    // Stream via OpenAI SDK
+    const OpenAI = require('openai');
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const stream = await client.chat.completions.create({
+      model: model || 'gpt-4o-mini',
+      messages,
+      temperature: 0.7,
+      stream: true
+    });
+
+    let full = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content || '';
+      if (delta) {
+        full += delta;
+        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      }
+    }
+    res.write(`data: ${JSON.stringify({ done: true, text: full })}\n\n`);
+    res.end();
+  } catch (e) {
+    res.write(`data: ${JSON.stringify({ error: e?.message || 'stream error' })}\n\n`);
+    res.end();
+  }
 }));
 
 // Agent routes (OpenAI-first engine)
