@@ -1,4 +1,4 @@
-// sw.js - Service Worker for SMARTLOCAL.AI
+// sw.js - Service Worker for Morrow.AI
 
 const CACHE_NAME = 'smartlocal-ai-cache-v1';
 

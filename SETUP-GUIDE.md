@@ -1,4 +1,4 @@
-# 🚀 SMARTLOCAL.AI with Local AI Server
+# 🚀 Morrow.AI with Local AI Server
 
 ## Quick Setup Guide
 
@@ -147,4 +147,4 @@ ollama serve
    - More RAM for larger models
    - SSD for faster model loading
 
-Your local AI server is now ready to power exciting new features in your SMARTLOCAL.AI webapp! 🎉
+Your local AI server is now ready to power exciting new features in your Morrow.AI webapp! 🎉

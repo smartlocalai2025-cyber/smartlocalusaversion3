@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StatusIndicator } from './StatusIndicator';
 import { localAI } from '../ai-service';
+import AuditView from './AuditView';
 
 const Dashboard: React.FC = () => {
   const [aiHealth, setAiHealth] = useState<boolean>(false);
@@ -258,6 +259,10 @@ const Dashboard: React.FC = () => {
             {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
           </div>
         )}
+      </section>
+      <section>
+        <h2>Audit Engine</h2>
+        <AuditView />
       </section>
     </div>
   );

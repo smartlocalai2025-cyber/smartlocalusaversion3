@@ -1662,7 +1662,7 @@ const AIAssistantView: FC = () => {
     return (
         <div className="view-container ai-assistant-view">
             <div className="assistant-header">
-                <h2>🤖 SMARTLOCAL.AI Assistant</h2>
+                <h2>🤖 Morrow.AI</h2>
                 <p>Your expert AI consultant for local SEO, digital marketing, and business growth strategies.</p>
                 <button className="btn btn-secondary" onClick={clearConversation}>Clear Conversation</button>
             </div>

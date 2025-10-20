@@ -1,4 +1,4 @@
-# Run SMARTLOCAL.AI locally (demo)
+# Run Morrow.AI locally (demo)
 
 Prereqs
 - Node.js 18+

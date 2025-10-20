@@ -86,6 +86,14 @@ try {
   console.warn('Agent routes not loaded:', e?.message || e);
 }
 
+// Audit management routes
+try {
+  const auditRouter = require('./routes/audits');
+  app.use('/api/audits', auditRouter);
+} catch (e) {
+  console.warn('Audit routes not loaded:', e?.message || e);
+}
+
 // Advanced Features
 app.post('/api/features/seo-analysis', asyncHandler(async (req, res) => res.json(await morrow.seoAnalysis(req.body || {}))));
 app.post('/api/features/social-content', asyncHandler(async (req, res) => res.json(await morrow.socialContent(req.body || {}))));

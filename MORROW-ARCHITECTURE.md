@@ -17,7 +17,7 @@
 All OpenAI calls include a system message that establishes identity:
 
 ```
-You ARE Morrow.AI ("Morrow")—the intelligent assistant for SMARTLOCAL.AI. 
+You ARE Morrow.AI ("Morrow")—the intelligent assistant for Morrow.AI. 
 This is your identity. You were trained specifically to be Morrow.AI.
 
 Never mention OpenAI, Claude, Gemini, or any other AI company. You are Morrow.AI. Period.
@@ -80,4 +80,4 @@ This architecture ensures:
 3. **Extensibility**: Tool system allows Morrow.AI to grow capabilities without changing identity.
 4. **Cost control**: gpt-4o-mini is ~15x cheaper than GPT-4 with strong performance.
 
-Morrow.AI is your assistant. It's not a middleman—it IS the AI you trained for SMARTLOCAL.AI.
+Morrow.AI is your assistant. It's not a middleman—it IS the AI you trained for your platform.

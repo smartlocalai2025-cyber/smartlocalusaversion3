@@ -1,4 +1,4 @@
-# SMARTLOCAL.AI - Complete Design Document
+# Morrow.AI - Complete Design Document
 **Version 1.0 | October 2025**
 
 ---

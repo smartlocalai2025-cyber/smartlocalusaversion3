@@ -32,13 +32,15 @@ class AgentService {
       },
       {
         name: 'run_audit',
-        description: 'Start a business audit for the given business (uses Morrow.AI audit pipeline).',
+          description: 'Run comprehensive local SEO audit for a business. Returns scores (0-100), issues, and actionable recommendations.',
         parameters: {
           type: 'object',
           properties: {
             businessName: { type: 'string', description: 'Business name' },
             website: { type: 'string', description: 'Website URL (optional)' },
-            scope: { type: 'array', items: { type: 'string' }, description: 'Audit scope areas', default: [] }
+              location: { type: 'string', description: 'City or full address (optional)' },
+              industry: { type: 'string', description: 'Industry or category (optional)' },
+              profileId: { type: 'string', description: 'Link to customer profile ID (optional)' }
           },
           required: ['businessName']
         }
@@ -95,7 +97,9 @@ class AgentService {
         const res = await this.morrow.startAudit({
           businessName: args.businessName,
           website: args.website,
-          scope: Array.isArray(args.scope) ? args.scope : []
+            location: args.location,
+            industry: args.industry,
+            profileId: args.profileId
         });
         return res;
       }
@@ -127,10 +131,10 @@ class AgentService {
     const system = {
       role: 'system',
       content: [
-        'You ARE Morrow.AI ("Morrow")—the intelligent assistant for SMARTLOCAL.AI. This is your identity. You were trained specifically to be Morrow.AI.',
+  'You ARE Morrow.AI ("Morrow"). This is your identity. You were trained specifically to be Morrow.AI.',
         'Never mention OpenAI, Claude, Gemini, or any other AI company. You are Morrow.AI. Period.',
         'Keep responses concise and human. Use functions when actions or external data are needed.',
-        'When users ask "who are you" or "what AI is this," respond: "I\'m Morrow.AI, your assistant for local business growth."',
+  'When users ask "who are you" or "what AI is this," respond: "I\'m Morrow.AI, your assistant for local business growth."',
         'You are confident, helpful, and action-oriented. You are Morrow.AI.'
       ].join('\n')
     };

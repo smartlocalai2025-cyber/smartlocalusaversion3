@@ -1,4 +1,4 @@
-// AI Service Layer for SMARTLOCAL.AI
+// AI Service Layer for Morrow.AI
 // Clean, unified implementation
 
 import { auth } from './firebase';
@@ -318,12 +318,58 @@ class LocalAIService {
   async startAudit(payload: {
     businessName?: string;
     website?: string;
+    location?: string;
+    industry?: string;
+    profileId?: string;
+    consultantUid?: string;
+    // backward-compat legacy
     scope?: string[];
     notes?: string;
     websiteContent?: any;
     placesData?: any;
-  } = {}, options: AIServiceOptions = {}): Promise<AIResponse> {
-    return this.request('/api/audit/start', payload, options);
+  } = {}, options: AIServiceOptions = {}): Promise<AIResponse & { audit?: any }> {
+    return this.request('/api/audit/start', payload, options) as any;
+  }
+
+  // Audits API (server-managed)
+  async getAudit(auditId: string): Promise<{ audit: any }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/${encodeURIComponent(auditId)}`);
+    if (!res.ok) throw new Error(`Failed to get audit: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getLatestAudit(businessName: string): Promise<{ audit: any }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/latest/${encodeURIComponent(businessName)}`);
+    if (!res.ok) throw new Error(`Failed to get latest audit: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getAuditsByBusiness(businessName: string, limit = 50): Promise<{ audits: any[]; count: number }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/business/${encodeURIComponent(businessName)}?limit=${limit}`);
+    if (!res.ok) throw new Error(`Failed to list audits: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getAuditHistory(businessName: string, count = 5): Promise<{ audits: any[]; count: number }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/history/${encodeURIComponent(businessName)}?count=${count}`);
+    if (!res.ok) throw new Error(`Failed to get audit history: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async updateAudit(auditId: string, updates: any): Promise<{ audit: any }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/${encodeURIComponent(auditId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) throw new Error(`Failed to update audit: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async deleteAudit(auditId: string): Promise<{ success: boolean }>{
+    const res = await fetch(`${this.baseUrl}/api/audits/${encodeURIComponent(auditId)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Failed to delete audit: HTTP ${res.status}`);
+    return res.json();
   }
 
   // Website intelligence: fetch and parse site content
