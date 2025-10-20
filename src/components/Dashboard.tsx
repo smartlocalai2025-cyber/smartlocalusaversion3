@@ -59,6 +59,14 @@ const Dashboard: React.FC = () => {
         <h1>Business Audit Dashboard</h1>
         <StatusIndicator />
       </header>
+      <div className="chat-header" role="region" aria-label="Assistant header">
+        <div className="brand">Morrow.AI</div>
+        <div className="meta">
+          <span className="status-pill">Now: {now}</span>
+          <span className="status-pill">Provider: {provider || '—'}</span>
+          <span className="status-pill">Model: {model || '—'}</span>
+        </div>
+      </div>
       <section>
         <h2>AI Status</h2>
         <p>Now: {now}</p>
@@ -98,8 +106,8 @@ const Dashboard: React.FC = () => {
           </label>
         </div>
       </section>
-      <section>
-        <h2>Talk to Morrow (Brain Mode)</h2>
+      <section className="card">
+        <h2>Talk to Morrow.AI (Brain Mode)</h2>
         <p style={{ marginTop: 4 }}>
           Route: <code>/api/ai/brain</code>. Uses the provider you select above. Choose <strong>openai</strong> to have the brain orchestrate tools and reply.
         </p>
@@ -131,8 +139,9 @@ const Dashboard: React.FC = () => {
               }
             }}
             disabled={brainBusy || !brainInput.trim()}
+          style={{ opacity: brainBusy ? 0.7 : 1 }}
           >
-            {brainBusy ? 'Thinking…' : 'Ask'}
+            {brainBusy ? 'Thinking…' : 'Ask Morrow.AI'}
           </button>
         </div>
         {(brainAnswer || error) && (
@@ -147,8 +156,8 @@ const Dashboard: React.FC = () => {
           </div>
         )}
       </section>
-      <section>
-        <h2>Talk to Morrow (Assistant)</h2>
+      <section className="card">
+        <h2>Talk to Morrow.AI (Assistant)</h2>
         <p style={{ marginTop: 4 }}>
           Route: <code>/api/ai/assistant</code>. This is a guided assistant chat without tool orchestration.
         </p>
@@ -175,8 +184,9 @@ const Dashboard: React.FC = () => {
               }
             }}
             disabled={assistantBusy || !assistantInput.trim()}
+          style={{ opacity: assistantBusy ? 0.7 : 1 }}
           >
-            {assistantBusy ? 'Answering…' : 'Ask'}
+            {assistantBusy ? 'Answering…' : 'Ask Morrow.AI'}
           </button>
         </div>
         {(assistantAnswer || error) && (
