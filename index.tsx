@@ -122,8 +122,8 @@ const auditLinkStyle: CSSProperties = {
 
 // --- Header Component ---
 const Header: FC<{ user: User | null }> = ({ user }) => {
-  const [showStats, setShowStats] = useState(false);
-  const isAdmin = user?.email === ADMIN_EMAIL;
+    const [showStats, setShowStats] = useState(false);
+    const isAdmin = !!(user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
   
   return (
     <header className="app-header">
@@ -168,7 +168,9 @@ if (functions && httpsCallable) {
 const useLocalAI = true; // Always use local AI server for all-local development
 
 // Admin email allowlist (frontend guard)
-const ADMIN_EMAIL = (import.meta as any)?.env?.VITE_ADMIN_EMAIL || 'tjmorrow909@gmail.com';
+const ADMIN_EMAILS_RAW = ((import.meta as any)?.env?.VITE_ADMIN_EMAILS || (import.meta as any)?.env?.VITE_ADMIN_EMAIL || 'tjmorrow909@gmail.com,smartlocalai2025@gmail.com') as string;
+const ADMIN_EMAILS = ADMIN_EMAILS_RAW.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean);
+const ADMIN_EMAIL = ADMIN_EMAILS[0] || 'smartlocalai2025@gmail.com';
 
 
 // --- Core Components ---
@@ -481,7 +483,7 @@ const LeadsView: FC = () => {
     const [leads, setLeads] = useState<Array<any>>([]);
     const [busy, setBusy] = useState<string | null>(null);
     const userEmail = auth?.currentUser?.email?.toLowerCase() || '';
-    const isAdmin = userEmail && ADMIN_EMAIL && userEmail === ADMIN_EMAIL.toLowerCase();
+    const isAdmin = !!(userEmail && ADMIN_EMAILS.includes(userEmail));
 
     const loadLeads = async () => {
         try {
@@ -535,7 +537,7 @@ const LeadsView: FC = () => {
                 <h2>Leads</h2>
                 <p>
                     This section is restricted to administrators.
-                    Please sign in with <strong>{ADMIN_EMAIL}</strong> or ask your developer to add your email to the admin allowlist.
+                    Please sign in with an approved admin email ({ADMIN_EMAILS.join(', ')}) or ask your developer to add your email to the admin allowlist.
                 </p>
             </div>
         );
@@ -1908,12 +1910,12 @@ const App: FC = () => {
             case 'CLIENT_SETUP': return <ClientSetupView onCreateProfile={handleCreateProfile} />;
             case 'AUDIT': return <AuditView business={auditTarget} onSaveAudit={handleSaveAudit} />;
                 case 'PROFILES':
-                    if (user.email !== ADMIN_EMAIL) {
+                    if (!(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()))) {
                         return <div style={{padding:'2rem',color:'#dc3545',textAlign:'center'}}><h2>Access Denied</h2><p>This section is restricted to the admin.</p></div>;
                     }
                     return <ProfilesView profiles={profiles} onSelectProfile={handleSelectProfile} loading={profilesLoading} />;
                 case 'PROFILE_DETAIL':
-                    if (user.email !== ADMIN_EMAIL) {
+                    if (!(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()))) {
                         return <div style={{padding:'2rem',color:'#dc3545',textAlign:'center'}}><h2>Access Denied</h2><p>This section is restricted to the admin.</p></div>;
                     }
                     return selectedProfile ? (
@@ -1930,12 +1932,12 @@ const App: FC = () => {
                     );
                 case 'TOOLS': return <ToolsView />;
                 case 'ADVANCED_FEATURES':
-                    if (user.email !== ADMIN_EMAIL) {
+                    if (!(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()))) {
                         return <div style={{padding:'2rem',color:'#dc3545',textAlign:'center'}}><h2>Access Denied</h2><p>This section is restricted to the admin.</p></div>;
                     }
                     return <AdvancedFeaturesView />;
                 case 'AI_ASSISTANT':
-                    if (user.email !== ADMIN_EMAIL) {
+                    if (!(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()))) {
                         return <div style={{padding:'2rem',color:'#dc3545',textAlign:'center'}}><h2>Access Denied</h2><p>This section is restricted to the admin.</p></div>;
                     }
                     return <AIAssistantView />;

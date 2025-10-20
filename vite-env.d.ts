@@ -18,6 +18,7 @@ declare interface ImportMetaEnv {
     VITE_REQUEST_TIMEOUT?: string | number;
     VITE_MAX_RETRIES?: string | number;
     VITE_ADMIN_EMAIL?: string;
+    VITE_ADMIN_EMAILS?: string;
 }
 
 declare interface ImportMeta {

@@ -21,7 +21,9 @@ View your app in AI Studio: https://ai.studio/apps/drive/13R4fDxC_pdM0tIOgMSQC9W
    ```bash
    # Required
    GEMINI_API_KEY=your_gemini_api_key
-   VITE_ADMIN_EMAIL=your_admin_email
+  VITE_ADMIN_EMAIL=your_admin_email
+  # Optional: allow multiple admin emails (comma-separated)
+  VITE_ADMIN_EMAILS=smartlocalai2025@gmail.com,your_admin_email
 
   # Frontend defaults
   VITE_LOCAL_AI_URL=http://localhost:3001

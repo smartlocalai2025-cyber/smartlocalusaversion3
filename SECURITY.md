@@ -34,6 +34,8 @@ VITE_DEFAULT_AI_MODEL=claude-3-sonnet-20240229
 VITE_REQUEST_TIMEOUT=30000
 VITE_MAX_RETRIES=2
 VITE_ADMIN_EMAIL=admin@example.com
+# Optional: allow multiple admin emails (comma-separated)
+VITE_ADMIN_EMAILS=admin@example.com,smartlocalai2025@gmail.com
 ```
 **Why safe?** These are non-sensitive configuration values. Backend verifies auth tokens.
 
