@@ -14,6 +14,11 @@ const Dashboard: React.FC = () => {
   const [brainBusy, setBrainBusy] = useState<boolean>(false);
   const [brainAnswer, setBrainAnswer] = useState<string>('');
   const [brainTraceCount, setBrainTraceCount] = useState<number>(0);
+  // Assistant chat state (non-brain)
+  const [assistantInput, setAssistantInput] = useState<string>('');
+  const [assistantBusy, setAssistantBusy] = useState<boolean>(false);
+  const [assistantAnswer, setAssistantAnswer] = useState<string>('');
+  const [now, setNow] = useState<string>(new Date().toLocaleString());
 
   useEffect(() => {
     const load = async () => {
@@ -32,7 +37,10 @@ const Dashboard: React.FC = () => {
       }
     };
     load();
-    const id = setInterval(load, 30000);
+    const id = setInterval(() => {
+      load();
+      setNow(new Date().toLocaleString());
+    }, 30000);
     return () => clearInterval(id);
   }, []);
   // Placeholder data for audits and reports
@@ -53,6 +61,7 @@ const Dashboard: React.FC = () => {
       </header>
       <section>
         <h2>AI Status</h2>
+        <p>Now: {now}</p>
         <p>Health: {aiHealth ? 'Online' : 'Offline'}</p>
         <p>Provider: {provider}</p>
         <p>Model: {model}</p>
@@ -92,7 +101,7 @@ const Dashboard: React.FC = () => {
       <section>
         <h2>Talk to Morrow (Brain Mode)</h2>
         <p style={{ marginTop: 4 }}>
-          This uses the provider you select above. Choose <strong>openai</strong> to have OpenAI orchestrate tools and reply.
+          Route: <code>/api/ai/brain</code>. Uses the provider you select above. Choose <strong>openai</strong> to have the brain orchestrate tools and reply.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
           <input
@@ -132,6 +141,49 @@ const Dashboard: React.FC = () => {
               <div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{brainAnswer}</div>
                 <div style={{ marginTop: 6, color: '#666' }}>Tools used: {brainTraceCount}</div>
+              </div>
+            )}
+            {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
+          </div>
+        )}
+      </section>
+      <section>
+        <h2>Talk to Morrow (Assistant)</h2>
+        <p style={{ marginTop: 4 }}>
+          Route: <code>/api/ai/assistant</code>. This is a guided assistant chat without tool orchestration.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginTop: 8 }}>
+          <input
+            type="text"
+            value={assistantInput}
+            onChange={(e) => setAssistantInput(e.target.value)}
+            placeholder={'Ask the assistant…'}
+            style={{ flex: 1, padding: '8px' }}
+            aria-label="Assistant prompt"
+          />
+          <button
+            onClick={async () => {
+              setAssistantBusy(true); setAssistantAnswer(''); setError('');
+              try {
+                const res: any = await localAI.askAssistant(assistantInput, undefined, undefined, { provider: provider as any, model: model || undefined });
+                const answer = res?.response || res?.text || res?.analysis || res?.report || '';
+                setAssistantAnswer(answer);
+              } catch (e: any) {
+                setError(e?.message || 'Assistant request failed');
+              } finally {
+                setAssistantBusy(false);
+              }
+            }}
+            disabled={assistantBusy || !assistantInput.trim()}
+          >
+            {assistantBusy ? 'Answering…' : 'Ask'}
+          </button>
+        </div>
+        {(assistantAnswer || error) && (
+          <div style={{ marginTop: 12 }}>
+            {assistantAnswer && (
+              <div>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{assistantAnswer}</div>
               </div>
             )}
             {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
