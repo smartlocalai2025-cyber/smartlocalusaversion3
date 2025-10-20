@@ -28,13 +28,13 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCf_7fIn3it0uZyvXQ9UghdAikCPIAzHuk",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "smartlocalai-b092a.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "smartlocalai-b092a",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "smartlocalai-b092a.firebasestorage.app",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "74298326501",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:74298326501:web:ba9fd38e11570306bf030c",
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-CDZ5YYQ7HG"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 let firebaseError: string | null = null;
