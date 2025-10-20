@@ -515,16 +515,29 @@ class MorrowAI {
 
     async startAudit({ businessName, website, location, industry, profileId }) {
       // Use new comprehensive audit engine
-      const { AuditEngine } = require('./services/audit-engine');
-      const engine = new AuditEngine(this);
-    
-      return this._simulateWork(async () => {
-        const audit = await engine.runFullAudit({ businessName, website, location, industry, profileId });
-        return {
-          audit,
+      try {
+        const { AuditEngine } = require('./services/audit-engine');
+        const engine = new AuditEngine(this);
+      
+        return this._simulateWork(async () => {
+          const audit = await engine.runFullAudit({ businessName, website, location, industry, profileId });
+          return {
+            audit,
+            provider: this.name,
+          };
+        }, { type: 'startAudit', businessName, website, location, industry, profileId });
+      } catch (error) {
+        // Fallback if audit engine is not available
+        console.warn('Audit engine not available:', error.message);
+        return this._simulateWork(async () => ({
+          audit: {
+            status: 'unavailable',
+            message: 'Audit engine not configured',
+            error: error.message
+          },
           provider: this.name,
-        };
-      }, { type: 'startAudit', businessName, website, location, industry, profileId });
+        }), { type: 'startAudit', businessName, website, location, industry, profileId });
+      }
     }
 
   async generateReport({ auditId, format = 'markdown' }) {
