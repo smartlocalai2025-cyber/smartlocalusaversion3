@@ -99,6 +99,9 @@ class AuditEngine {
     const results = {
       websiteContent: null,
       placesData: null,
+      competitors: [],
+      marketAnalysis: null,
+      insights: [],
       citations: [],
       social: {}
     };
@@ -114,9 +117,38 @@ class AuditEngine {
       }
     }
 
-    // TODO: Fetch Google Places data (requires API key)
-    // For now, return null; integrate when GOOGLE_PLACES_API_KEY is available
-    results.placesData = null;
+    // NEW: Fetch Google Places data with competitive intelligence
+    if (businessName && location) {
+      try {
+        const { GooglePlacesService } = require('./google-places');
+        const placesService = new GooglePlacesService();
+        
+        // Get business data from Google Places
+        const placesData = await placesService.findBusiness(businessName, location);
+        
+        if (placesData) {
+          results.placesData = placesData;
+          
+          // Find competitors in the area
+          const competitors = await placesService.findCompetitors(placesData, industry);
+          results.competitors = competitors;
+          
+          // Analyze market position
+          const marketAnalysis = placesService.analyzeMarketPosition(placesData, competitors);
+          results.marketAnalysis = marketAnalysis;
+          
+          // Generate actionable insights
+          const insights = placesService.generateInsights(placesData, marketAnalysis);
+          results.insights = insights;
+          
+          console.log(`✅ Google Places data loaded: ${placesData.name} (${placesData.rating}/5, ${competitors.length} competitors found)`);
+        } else {
+          console.log(`⚠️  No Google Places data found for: ${businessName}, ${location}`);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch Google Places data:', e.message);
+      }
+    }
 
     // TODO: Check citations across directories (Yelp, BBB, etc.)
     // Placeholder for now
@@ -231,20 +263,21 @@ class AuditEngine {
   }
 
   /**
-   * Build comprehensive analysis prompt for OpenAI
+   * Build comprehensive analysis prompt for OpenAI with live business intelligence
    */
   _buildAnalysisPrompt({ businessName, website, location, industry, data }) {
     const parts = [
-      `Analyze this local business and provide a comprehensive SEO audit:`,
+      `Analyze this local business using LIVE DATA and provide a data-driven SEO audit:`,
       ``,
       `**Business**: ${businessName}`,
       website ? `**Website**: ${website}` : null,
       location ? `**Location**: ${location}` : null,
       industry ? `**Industry**: ${industry}` : null,
       ``,
-      `**Data Collected**:`
+      `**LIVE BUSINESS INTELLIGENCE**:`
     ];
 
+    // Website intelligence
     if (data.websiteContent) {
       parts.push(`- Website Title: ${data.websiteContent.title || 'N/A'}`);
       parts.push(`- Meta Description: ${data.websiteContent.description || 'N/A'}`);
@@ -260,21 +293,71 @@ class AuditEngine {
       parts.push(`- Website: Not provided`);
     }
 
+    // Google Business Profile live data
     if (data.placesData) {
-      parts.push(`- Google Rating: ${data.placesData.rating || 'N/A'} (${data.placesData.user_ratings_total || 0} reviews)`);
-      parts.push(`- Business Status: ${data.placesData.business_status || 'Unknown'}`);
+      parts.push(`**GOOGLE BUSINESS PROFILE (LIVE DATA):**`);
+      parts.push(`- Rating: ${data.placesData.rating || 'N/A'}/5 (${data.placesData.user_ratings_total || 0} reviews)`);
+      parts.push(`- Status: ${data.placesData.business_status || 'Unknown'}`);
+      parts.push(`- Address: ${data.placesData.formatted_address || 'N/A'}`);
+      parts.push(`- Phone: ${data.placesData.formatted_phone_number || 'Not listed'}`);
+      parts.push(`- Website Listed: ${data.placesData.website ? 'Yes' : 'No'}`);
+      
+      if (data.placesData.opening_hours) {
+        parts.push(`- Currently Open: ${data.placesData.opening_hours.open_now ? 'Yes' : 'No'}`);
+      }
+      
+      if (data.placesData.photos) {
+        parts.push(`- Photos: ${data.placesData.photos.length} uploaded`);
+      }
+      
+      if (data.placesData.types && data.placesData.types.length) {
+        parts.push(`- Categories: ${data.placesData.types.slice(0, 5).join(', ')}`);
+      }
     } else {
-      parts.push(`- Google Business Profile: Not found or not checked`);
+      parts.push(`- Google Business Profile: Not found (major visibility issue)`);
+    }
+
+    // Competitive intelligence
+    if (data.competitors && data.competitors.length > 0) {
+      parts.push(`**LOCAL COMPETITIVE LANDSCAPE:**`);
+      parts.push(`- Competitors Found: ${data.competitors.length}`);
+      
+      const topCompetitor = data.competitors[0];
+      if (topCompetitor) {
+        parts.push(`- Top Competitor: ${topCompetitor.name} (${topCompetitor.rating}/5, ${topCompetitor.userRatingsTotal} reviews)`);
+      }
+      
+      const avgRating = data.competitors.reduce((sum, c) => sum + (c.rating || 0), 0) / data.competitors.length;
+      const avgReviews = data.competitors.reduce((sum, c) => sum + (c.userRatingsTotal || 0), 0) / data.competitors.length;
+      
+      parts.push(`- Market Avg Rating: ${avgRating.toFixed(1)}/5`);
+      parts.push(`- Market Avg Reviews: ${Math.round(avgReviews)}`);
+    }
+
+    // Market analysis insights
+    if (data.marketAnalysis && data.marketAnalysis.insights) {
+      parts.push(`**MARKET POSITION ANALYSIS:**`);
+      data.marketAnalysis.insights.forEach(insight => {
+        parts.push(`- ${insight}`);
+      });
+    }
+
+    // Actionable insights from Google Places
+    if (data.insights && data.insights.length > 0) {
+      parts.push(`**LIVE DATA INSIGHTS:**`);
+      data.insights.forEach(insight => {
+        parts.push(`- ${insight.category.toUpperCase()}: ${insight.issue}`);
+      });
     }
 
     parts.push(``);
-    parts.push(`**Your Task**:`);
-    parts.push(`1. Score each category (website, gbp, citations, reviews, social) from 0-100`);
-    parts.push(`2. Calculate overall score as weighted average`);
-    parts.push(`3. Identify specific issues with severity (critical/high/medium/low)`);
-    parts.push(`4. Provide actionable recommendations prioritized by impact`);
-    parts.push(`5. Be specific and practical—avoid generic advice`);
-    parts.push(`6. If data is missing, note it as an issue and recommend collecting it`);
+    parts.push(`**YOUR TASK (USE LIVE DATA FOR SPECIFIC RECOMMENDATIONS):**`);
+    parts.push(`1. Score each category (website, gbp, citations, reviews, social) from 0-100 based on ACTUAL performance vs local market`);
+    parts.push(`2. Calculate overall score weighted by business impact`);
+    parts.push(`3. Identify specific issues with severity based on competitive gaps`);
+    parts.push(`4. Provide data-driven recommendations with quantified impact (e.g., "Rating 0.8 points below market average")`);
+    parts.push(`5. Prioritize by competitive advantage potential, not generic best practices`);
+    parts.push(`6. Reference specific competitor data and market benchmarks in recommendations`);
 
     return parts.filter(Boolean).join('\n');
   }
