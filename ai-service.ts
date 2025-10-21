@@ -398,6 +398,16 @@ class LocalAIService {
     return res.json();
   }
 
+  async sendCustomerNotification(id: string, channel?: 'email' | 'sms'): Promise<{ ok: boolean; channel: string; magicLink: string; simulated?: boolean }>{
+    const res = await fetch(`${this.baseUrl}/api/customer/profile/${encodeURIComponent(id)}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel })
+    });
+    if (!res.ok) throw new Error(`Failed to send notification: HTTP ${res.status}`);
+    return res.json();
+  }
+
   async deleteAudit(auditId: string): Promise<{ success: boolean }>{
     const res = await fetch(`${this.baseUrl}/api/audits/${encodeURIComponent(auditId)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`Failed to delete audit: HTTP ${res.status}`);
