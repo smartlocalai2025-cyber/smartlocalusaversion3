@@ -174,7 +174,38 @@ const brainResponse = await localAI.brain(
 );
 console.log(brainResponse.final_text); // AI's final answer
 console.log(brainResponse.tool_trace); // Tools used
+
+// Client Portal: Create and send access to clients
+const profile = await localAI.createCustomerProfile({
+  businessProfileId: 'business-123',
+  contact: { email: 'client@example.com' },
+  selectedTools: ['audit', 'reports', 'progress'],
+  channel: 'email'
+});
+
+// Send notification with magic link
+await localAI.sendCustomerNotification(profile.profile.id, 'email');
 ```
+
+## 🎯 Client Portal Management
+
+Create secure client portals to share audit results and track implementation progress. Clients receive magic links via email or SMS for instant access.
+
+**Key Features:**
+- Create client portals from Dashboard or after completing audits
+- Automatic email/SMS notifications with secure magic links
+- Client view of audit results, recommendations, and progress
+- No password required - secure verification code system
+- Track implementation milestones and updates
+
+**Quick Start:**
+1. Complete an audit for a business
+2. Click "Create Client Portal" in the audit results
+3. Enter client email/phone
+4. System automatically sends access link
+5. Client clicks link to view their portal
+
+**See [CLIENT-PORTAL-GUIDE.md](CLIENT-PORTAL-GUIDE.md) for detailed setup and usage instructions.**
 
 ## 🧠 Brain Mode
 
