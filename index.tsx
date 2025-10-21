@@ -1,4 +1,4 @@
-import React, { useState, useEffect, type FC, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, type FC, useCallback, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -1703,6 +1703,31 @@ const AIAssistantView: FC = () => {
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
     const [conversationId, setConversationId] = useState<string>('');
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-scroll to bottom when messages change
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages, isThinking]);
+
+    // Keep input focused after sending messages
+    useEffect(() => {
+        if (!isThinking && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isThinking]);
+
+    // Focus input on component mount
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, []);
 
     const handleSendMessage = async () => {
         if (!input.trim()) return;
@@ -1792,10 +1817,14 @@ const AIAssistantView: FC = () => {
                             </div>
                         </div>
                     )}
+                    
+                    {/* Auto-scroll anchor */}
+                    <div ref={messagesEndRef} />
                 </div>
                 
                 <div className="chat-input-container">
                     <input 
+                        ref={inputRef}
                         type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
