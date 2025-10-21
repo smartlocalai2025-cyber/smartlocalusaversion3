@@ -1,0 +1,83 @@
+name: CIname: CI
+
+
+
+on:on:
+
+  push:  push:
+
+    branches: [ main ]    branches: [ main ]
+
+  pull_request:  pull_request:
+
+    branches: [ main ]    branches: [ main ]
+
+
+
+jobs:jobs:
+
+  build:  build:
+
+    runs-on: ubuntu-latest    runs-on: ubuntu-latest
+
+    steps:    steps:
+
+      - name: Checkout      - name: Checkout
+
+        uses: actions/checkout@v4        uses: actions/checkout@v4
+
+
+
+      - name: Setup Node.js      - name: Setup Node.js
+
+        uses: actions/setup-node@v4        uses: actions/setup-node@v4
+
+        with:        with:
+
+          node-version: '20'          node-version: '20'
+
+
+
+      - name: Install root deps      - name: Install root deps
+
+        run: npm ci        run: npm ci
+
+
+
+      - name: Install ai-server deps      - name: Install ai-server deps
+
+        run: npm ci        run: npm ci
+
+        working-directory: ai-server        working-directory: ai-server
+
+
+
+      - name: Install functions deps      - name: Install functions deps
+
+        run: npm ci        run: npm ci
+
+        working-directory: functions        working-directory: functions
+
+
+
+      - name: Typecheck      - name: Typecheck
+
+        run: npm run typecheck --if-present        run: npm run typecheck
+
+
+
+      - name: Build frontend      - name: Build frontend
+
+        run: npm run build        run: npm run build
+
+
+
+      - name: Build functions      - name: Build functions
+
+        run: npm run build        run: npm run build
+
+        working-directory: functions        working-directory: functions
+
+
+      - name: Test placeholder
+        run: echo "No tests yet"
