@@ -5,6 +5,40 @@ const admin = require('firebase-admin');
 
 class AuditPersistence {
   constructor() {
+    // ...existing code...
+    this.db = admin.firestore();
+    this.auditsCollection = this.db.collection('audits');
+    this.profilesCollection = this.db.collection('businessProfiles');
+  }
+
+  /**
+   * Get a business profile by name (case-insensitive)
+   * @param {string} name
+   * @returns {Promise<Object|null>}
+   */
+  async getProfileByName(name) {
+    const snapshot = await this.profilesCollection.where('name', '==', name).limit(1).get();
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
+  }
+
+  /**
+   * Save (create or update) a business profile
+   * @param {Object} profile
+   * @returns {Promise<void>}
+   */
+  async saveProfile(profile) {
+    if (!profile.id) {
+      // New profile
+      const docRef = await this.profilesCollection.add(profile);
+      profile.id = docRef.id;
+    } else {
+      // Update existing
+      await this.profilesCollection.doc(profile.id).set(profile, { merge: true });
+    }
+  }
+  constructor() {
     // Initialize Firestore (assumes firebase-admin already initialized in server.js)
     this.db = admin.firestore();
     this.auditsCollection = this.db.collection('audits');

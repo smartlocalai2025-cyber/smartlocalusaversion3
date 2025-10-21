@@ -158,6 +158,15 @@ try {
   console.warn('Agent routes not loaded:', e?.message || e);
 }
 
+
+// Profile management routes (business onboarding)
+try {
+  const profileRouter = require('./routes/profile');
+  app.use('/api/profile', profileRouter);
+} catch (e) {
+  console.warn('Profile routes not loaded:', e?.message || e);
+}
+
 // Audit management routes
 try {
   const auditRouter = require('./routes/audits');

@@ -84,7 +84,7 @@ declare namespace google.maps {
 
 // --- Component Props ---
 interface MapViewProps {
-    onStartAudit: (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string; placesData?: any }) => void;
+    onStartAudit: (business: { name: string; website?: string; address?: string; websiteContent?: any; notes?: string; location?: string; industry?: string; placesData?: any; profileId?: string }) => void;
 }
 
 // --- Constants ---
@@ -853,7 +853,7 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                         width: 360,
                         maxWidth: '90vw'
                     }}>
-                        <h4 style={{marginTop:0}}>Create profile & run audit</h4>
+                        <h4 style={{marginTop:0}}>Business Onboarding</h4>
                         <div style={{fontSize:14, opacity:0.9, marginBottom:8}}>
                             {pendingBusiness.name}
                             {pendingBusiness.address && <div style={{opacity:0.8}}>{pendingBusiness.address}</div>}
@@ -878,11 +878,11 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                             placeholder="e.g., Restaurant, Plumbing"
                             style={{width:'100%'}}
                         />
-                        <label style={{display:'block', fontSize:12, marginTop:8}}>Notes (optional)</label>
+                        <label style={{display:'block', fontSize:12, marginTop:8}}>Onboarding Notes</label>
                         <textarea
                             rows={3}
                             onChange={(e)=> setExtraDetails(prev=>({ ...prev, notes: e.target.value }))}
-                            placeholder="Anything specific to focus on"
+                            placeholder="Anything specific to focus on during onboarding or audit"
                             style={{width:'100%'}}
                         />
                         <div style={{display:'flex', gap:8, marginTop:12, alignItems:'center'}}>
@@ -890,7 +890,6 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                                 className="btn btn-primary"
                                 onClick={async ()=>{
                                     try {
-                                        // Optional: fetch website intel before audit
                                         setIsFetchingIntel(true);
                                         let intelData: any = null;
                                         const site = (extraDetails.website || pendingBusiness.website || '').trim();
@@ -899,8 +898,23 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                                             intelData = await mod.localAI.fetchWebsiteIntel(site);
                                         }
                                         setIntel(intelData);
+                                        // 1. Create or update business profile via backend
+                                        const profileRes = await fetch('/api/profile', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                name: pendingBusiness.name,
+                                                website: extraDetails.website || pendingBusiness.website,
+                                                location: extraDetails.location || pendingBusiness.address,
+                                                industry: extraDetails.industry,
+                                                notes: extraDetails.notes,
+                                                placesData: pendingBusiness.placesData
+                                            })
+                                        });
+                                        if (!profileRes.ok) throw new Error('Failed to save business profile');
+                                        const { profile } = await profileRes.json();
                                         setIsFetchingIntel(false);
-                                        // Kick off audit flow through parent
+                                        // 2. Only after onboarding, start audit with profileId
                                         onStartAudit({
                                             name: pendingBusiness.name,
                                             website: (extraDetails.website || pendingBusiness.website),
@@ -909,17 +923,18 @@ export const MapView: FC<MapViewProps> = ({ onStartAudit }) => {
                                             notes: extraDetails.notes,
                                             location: extraDetails.location,
                                             industry: extraDetails.industry,
-                                            placesData: pendingBusiness.placesData
+                                            placesData: pendingBusiness.placesData,
+                                            profileId: profile?.id
                                         });
                                         setPendingBusiness(null);
                                     } catch (e:any) {
                                         setIsFetchingIntel(false);
-                                        setToast({ message: e?.message || 'Failed to fetch website details' });
+                                        setToast({ message: e?.message || 'Failed to save profile or fetch website details' });
                                     }
                                 }}
                                 disabled={isFetchingIntel}
                             >
-                                {isFetchingIntel ? 'Analyzing site…' : 'Create & Run Audit'}
+                                {isFetchingIntel ? 'Saving & Analyzing…' : 'Complete Onboarding & Run Audit'}
                             </button>
                             <button className="btn" onClick={()=>{ setPendingBusiness(null); setExtraDetails({}); }}>Cancel</button>
                         </div>
