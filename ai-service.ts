@@ -371,6 +371,7 @@ class LocalAIService {
     businessProfileId: string;
     contact: { email?: string; phone?: string };
     selectedTools: string[];
+    selectedPackage?: { id: string; name: string; price: string; features: string[] };
     channel?: 'email' | 'sms';
   }): Promise<{ profile: any }>{
     const res = await fetch(`${this.baseUrl}/api/customer/profile`, {

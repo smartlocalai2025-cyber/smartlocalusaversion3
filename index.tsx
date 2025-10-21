@@ -1264,6 +1264,7 @@ const ServicesView: FC<{ businessProfileId?: string }> = ({ businessProfileId })
                                                                                     businessProfileId: businessProfileId!,
                                                                                     contact: { email: contactEmail || undefined, phone: contactPhone || undefined },
                                                                                     selectedTools: pkg.features,
+                                                                                    selectedPackage: { id: pkg.id, name: pkg.name, price: pkg.price, features: pkg.features },
                                                                                     channel
                                                                                 });
                                                                                                                         const profile = res?.profile;
