@@ -59,19 +59,34 @@ const CustomerProfile: React.FC = () => {
   if (!profile) return null;
   return (
     <div>
-      <h2>Welcome, {profile.contact.email || profile.contact.phone}</h2>
-      <h3>Your Tools</h3>
+      <h2>Welcome, {profile.contact?.email || profile.contact?.phone}</h2>
+      {profile.selectedPackage && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h3>Selected Package</h3>
+          <div><strong>{profile.selectedPackage?.name || profile.selectedPackage?.id || 'Your Plan'}</strong></div>
+          {Array.isArray(profile.selectedPackage?.features) && (
+            <ul>
+              {profile.selectedPackage.features.map((f: string, i: number) => <li key={i}>{f}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      <h3 style={{ marginTop: 16 }}>Your Tools</h3>
       <ul>
-        {profile.selectedTools.map((tool: string) => (
+        {(profile.selectedTools || []).map((tool: string) => (
           <li key={tool}>{tool}</li>
         ))}
       </ul>
-      <h3>Progress</h3>
-      <ul>
-        {Object.entries(profile.progress || {}).map(([tool, prog]: any) => (
-          <li key={tool}>{tool}: {prog.status} (Last updated: {prog.lastUpdated})</li>
-        ))}
-      </ul>
+      <h3 style={{ marginTop: 16 }}>Progress</h3>
+      {profile.progress && Object.keys(profile.progress).length > 0 ? (
+        <ul>
+          {Object.entries(profile.progress || {}).map(([tool, prog]: any) => (
+            <li key={tool}>{tool}: {prog.status} {prog.lastUpdated ? `(Last updated: ${prog.lastUpdated})` : ''}</li>
+          ))}
+        </ul>
+      ) : (
+        <div>No progress yet. We’ll update this as we complete steps.</div>
+      )}
     </div>
   );
 };

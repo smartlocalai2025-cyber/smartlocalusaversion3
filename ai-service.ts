@@ -366,6 +366,38 @@ class LocalAIService {
     return res.json();
   }
 
+  // Customer portal API
+  async createCustomerProfile(payload: {
+    businessProfileId: string;
+    contact: { email?: string; phone?: string };
+    selectedTools: string[];
+    channel?: 'email' | 'sms';
+  }): Promise<{ profile: any }>{
+    const res = await fetch(`${this.baseUrl}/api/customer/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`Failed to create customer profile: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getCustomerProfile(id: string): Promise<{ profile: any }>{
+    const res = await fetch(`${this.baseUrl}/api/customer/profile/${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`Failed to fetch customer profile: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async updateCustomerProgress(id: string, progress: any): Promise<{ profile: any }>{
+    const res = await fetch(`${this.baseUrl}/api/customer/profile/${encodeURIComponent(id)}/progress`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ progress })
+    });
+    if (!res.ok) throw new Error(`Failed to update customer progress: HTTP ${res.status}`);
+    return res.json();
+  }
+
   async deleteAudit(auditId: string): Promise<{ success: boolean }>{
     const res = await fetch(`${this.baseUrl}/api/audits/${encodeURIComponent(auditId)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`Failed to delete audit: HTTP ${res.status}`);

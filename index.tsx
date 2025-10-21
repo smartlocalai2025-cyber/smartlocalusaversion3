@@ -1158,8 +1158,14 @@ const ToolsView: FC = () => {
     );
 };
 
-const ServicesView: FC = () => {
+const ServicesView: FC<{ businessProfileId?: string }> = ({ businessProfileId }) => {
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
+    const [acceptingFor, setAcceptingFor] = useState<string | null>(null);
+    const [contactEmail, setContactEmail] = useState('');
+    const [contactPhone, setContactPhone] = useState('');
+    const [creating, setCreating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [magicLink, setMagicLink] = useState<string | null>(null);
 
     const handleCardClick = (cardId: string) => {
         setExpandedCard(expandedCard === cardId ? null : cardId);
@@ -1223,6 +1229,85 @@ const ServicesView: FC = () => {
                             <ul>
                                 {pkg.features.map((feature, index) => <li key={index}>{feature}</li>)}
                             </ul>
+                                                        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                <button
+                                                                    className="btn btn-primary"
+                                                                    onClick={(e) => { e.stopPropagation(); setAcceptingFor(pkg.id); setError(null); setMagicLink(null); }}
+                                                                    title={businessProfileId ? 'Create client portal for this package' : 'Select or onboard a business first (from Map)'}
+                                                                    disabled={!businessProfileId}
+                                                                >
+                                                                    {businessProfileId ? 'Accept Package & Create Portal' : 'Select a Business to Continue'}
+                                                                </button>
+                                                        </div>
+                                                        {acceptingFor === pkg.id && (
+                                                            <div style={{ marginTop: 12, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fafafa' }} onClick={(e)=> e.stopPropagation()}>
+                                                                <div style={{ fontWeight: 600, marginBottom: 8 }}>Create client portal access</div>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                                                                    <label>
+                                                                        Client Email
+                                                                        <input type="email" value={contactEmail} onChange={e=> setContactEmail(e.target.value)} placeholder="owner@example.com" />
+                                                                    </label>
+                                                                    <label>
+                                                                        Or Phone (SMS)
+                                                                        <input type="tel" value={contactPhone} onChange={e=> setContactPhone(e.target.value)} placeholder="+1 555 123 4567" />
+                                                                    </label>
+                                                                </div>
+                                                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                                                    <button
+                                                                        className="btn btn-primary"
+                                                                        disabled={creating || !businessProfileId || (!contactEmail && !contactPhone)}
+                                                                        onClick={async ()=>{
+                                                                            try {
+                                                                                setCreating(true); setError(null); setMagicLink(null);
+                                                                                const channel = contactEmail ? 'email' : 'sms';
+                                                                                const res = await (localAI as any).createCustomerProfile({
+                                                                                    businessProfileId: businessProfileId!,
+                                                                                    contact: { email: contactEmail || undefined, phone: contactPhone || undefined },
+                                                                                    selectedTools: pkg.features,
+                                                                                    channel
+                                                                                });
+                                                                                                                        const profile = res?.profile;
+                                                                                if (!profile?.id || !profile?.verificationCode) throw new Error('Unexpected response creating portal');
+                                                                                const link = `${window.location.origin}/customer/${encodeURIComponent(profile.id)}?code=${encodeURIComponent(profile.verificationCode)}`;
+                                                                                setMagicLink(link);
+                                                                                                                        // Auto-send magic link via backend notify endpoint
+                                                                                                                        try {
+                                                                                                                            const notifyRes = await fetch(`/api/customer/profile/${encodeURIComponent(profile.id)}/notify`, {
+                                                                                                                                method: 'POST',
+                                                                                                                                headers: { 'Content-Type': 'application/json', 'X-App-Origin': window.location.origin },
+                                                                                                                                body: JSON.stringify({ channel })
+                                                                                                                            });
+                                                                                                                            if (!notifyRes.ok) {
+                                                                                                                                const txt = await notifyRes.text();
+                                                                                                                                console.warn('Notify failed:', txt);
+                                                                                                                            }
+                                                                                                                        } catch (e) {
+                                                                                                                            console.warn('Notify request error:', e);
+                                                                                                                        }
+                                                                            } catch (e: any) {
+                                                                                setError(e?.message || 'Failed to create client portal');
+                                                                            } finally {
+                                                                                setCreating(false);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {creating ? 'Creating…' : 'Create Portal & Generate Link'}
+                                                                    </button>
+                                                                    <button className="btn" onClick={()=> { setAcceptingFor(null); setContactEmail(''); setContactPhone(''); setMagicLink(null); setError(null); }}>Cancel</button>
+                                                                </div>
+                                                                {error && <div style={{ color: '#c00', marginTop: 8 }}>{error}</div>}
+                                                                {magicLink && (
+                                                                    <div style={{ marginTop: 10 }}>
+                                                                        <div style={{ fontWeight: 600 }}>Magic Link</div>
+                                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                            <a href={magicLink} target="_blank" rel="noreferrer" style={auditLinkStyle}>{magicLink}</a>
+                                                                            <button className="btn" onClick={async ()=>{ try { await navigator.clipboard.writeText(magicLink); } catch {} }}>Copy</button>
+                                                                        </div>
+                                                                        <div style={{ fontSize: 12, color: '#555' }}>Share this link with the client via {contactEmail ? 'email' : 'SMS'} to access their portal.</div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                         </div>
                     </div>
                 ))}
@@ -1906,7 +1991,11 @@ const App: FC = () => {
                     return <div style={{padding:'2rem',color:'#dc3545',textAlign:'center'}}><h2>Access Denied</h2><p>This section is restricted to the admin.</p></div>;
                 }
                 return <AgentFeedView />;
-            case 'SERVICES': return <ServicesView />;
+            case 'SERVICES': {
+                // Best-effort: use current auditTarget.id as businessProfileId if created in Firestore
+                const profileId = (auditTarget as any)?.id || (selectedProfile as any)?.id || undefined;
+                return <ServicesView businessProfileId={profileId} />;
+            }
             case 'CLIENT_SETUP': return <ClientSetupView onCreateProfile={handleCreateProfile} />;
             case 'AUDIT': return <AuditView business={auditTarget} onSaveAudit={handleSaveAudit} />;
                 case 'PROFILES':

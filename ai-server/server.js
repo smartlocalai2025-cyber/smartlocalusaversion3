@@ -11,6 +11,17 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 app.use(express.json());
 // Allow cross-origin requests in case frontend is on a different origin (dev/proxy or separate host)
 app.use(cors());
+
+// Initialize Firebase Admin SDK (Cloud Run will provide ADC by default)
+try {
+  const admin = require('firebase-admin');
+  if (!admin.apps || !admin.apps.length) {
+    admin.initializeApp();
+    console.log('Firebase Admin initialized');
+  }
+} catch (e) {
+  console.warn('Firebase Admin not initialized:', e?.message || e);
+}
 const morrow = new MorrowAI();
 const ADMIN_TOKEN = process.env.MORROW_ADMIN_TOKEN || 'localdev';
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -184,6 +195,14 @@ app.post('/api/features/content-calendar', asyncHandler(async (req, res) => res.
 // Audits & Reports
 app.post('/api/audit/start', asyncHandler(async (req, res) => res.json(await morrow.startAudit(req.body || {}))));
 app.post('/api/report/generate', asyncHandler(async (req, res) => res.json(await morrow.generateReport(req.body || {}))));
+
+// Customer portal routes
+try {
+  const customerRouter = require('./routes/customer');
+  app.use('/api/customer', customerRouter);
+} catch (e) {
+  console.warn('Customer routes not loaded:', e?.message || e);
+}
 
 // Website Intelligence handler (extracted)
 const handleWebsiteIntel = async (req, res) => {
