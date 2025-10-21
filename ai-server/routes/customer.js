@@ -15,7 +15,7 @@ function generateCode() {
 // POST /api/customer/profile - create a customer access profile after package acceptance
 router.post('/profile', async (req, res) => {
   try {
-    const { businessProfileId, contact, selectedTools = [], channel = 'email' } = req.body || {};
+    const { businessProfileId, contact, selectedTools = [], selectedPackage, channel = 'email' } = req.body || {};
     if (!businessProfileId) return res.status(400).json({ error: 'businessProfileId is required' });
     if (!contact || (!contact.email && !contact.phone)) return res.status(400).json({ error: 'contact email or phone required' });
 
@@ -27,6 +27,7 @@ router.post('/profile', async (req, res) => {
       contact,
       channel,
       selectedTools,
+      selectedPackage: selectedPackage || null,
       progress: {},
       verificationCode,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),

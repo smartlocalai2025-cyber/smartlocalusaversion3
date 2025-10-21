@@ -371,6 +371,7 @@ class LocalAIService {
     businessProfileId: string;
     contact: { email?: string; phone?: string };
     selectedTools: string[];
+    selectedPackage?: { id: string; name: string; price: string; features: string[] };
     channel?: 'email' | 'sms';
   }): Promise<{ profile: any }>{
     const res = await fetch(`${this.baseUrl}/api/customer/profile`, {
@@ -395,6 +396,16 @@ class LocalAIService {
       body: JSON.stringify({ progress })
     });
     if (!res.ok) throw new Error(`Failed to update customer progress: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async sendCustomerNotification(id: string, channel?: 'email' | 'sms'): Promise<{ ok: boolean; channel: string; magicLink: string; simulated?: boolean }>{
+    const res = await fetch(`${this.baseUrl}/api/customer/profile/${encodeURIComponent(id)}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel })
+    });
+    if (!res.ok) throw new Error(`Failed to send notification: HTTP ${res.status}`);
     return res.json();
   }
 

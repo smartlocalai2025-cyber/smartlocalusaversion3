@@ -25,6 +25,14 @@ const Dashboard: React.FC = () => {
   const [assistantStreamText, setAssistantStreamText] = useState<string>('');
   const [now, setNow] = useState<string>(new Date().toLocaleString());
   const [streamByDefault, setStreamByDefault] = useState<boolean>(false);
+  // Client portal state
+  const [portalBusinessId, setPortalBusinessId] = useState<string>('');
+  const [portalEmail, setPortalEmail] = useState<string>('');
+  const [portalPhone, setPortalPhone] = useState<string>('');
+  const [portalChannel, setPortalChannel] = useState<'email' | 'sms'>('email');
+  const [portalCreating, setPortalCreating] = useState<boolean>(false);
+  const [portalLink, setPortalLink] = useState<string>('');
+  const [portalMessage, setPortalMessage] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -348,6 +356,112 @@ const Dashboard: React.FC = () => {
             {error && <div style={{ color: '#c00' }} aria-live="assertive">{error}</div>}
           </div>
         )}
+      </section>
+      <section className="card">
+        <h2>Client Portal Management</h2>
+        <p style={{ marginTop: 4 }}>Create a client portal and send access notification to your customer.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <label style={{ minWidth: 120 }}>Business Profile ID:</label>
+            <input
+              type="text"
+              value={portalBusinessId}
+              onChange={(e) => setPortalBusinessId(e.target.value)}
+              placeholder="Enter business profile ID"
+              style={{ flex: 1, padding: '6px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <label style={{ minWidth: 120 }}>Contact Email:</label>
+            <input
+              type="email"
+              value={portalEmail}
+              onChange={(e) => setPortalEmail(e.target.value)}
+              placeholder="customer@example.com"
+              style={{ flex: 1, padding: '6px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <label style={{ minWidth: 120 }}>Contact Phone:</label>
+            <input
+              type="tel"
+              value={portalPhone}
+              onChange={(e) => setPortalPhone(e.target.value)}
+              placeholder="+1234567890 (optional)"
+              style={{ flex: 1, padding: '6px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <label style={{ minWidth: 120 }}>Notification:</label>
+            <select
+              value={portalChannel}
+              onChange={(e) => setPortalChannel(e.target.value as 'email' | 'sms')}
+              style={{ padding: '6px' }}
+            >
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={async () => {
+                setPortalCreating(true); setPortalMessage(''); setPortalLink(''); setError('');
+                try {
+                  if (!portalBusinessId.trim()) {
+                    setError('Business Profile ID is required');
+                    return;
+                  }
+                  if (!portalEmail.trim() && !portalPhone.trim()) {
+                    setError('Either email or phone is required');
+                    return;
+                  }
+                  // Create customer profile
+                  const profile = await localAI.createCustomerProfile({
+                    businessProfileId: portalBusinessId,
+                    contact: {
+                      email: portalEmail || undefined,
+                      phone: portalPhone || undefined,
+                    },
+                    selectedTools: ['audit', 'reports', 'recommendations'],
+                    channel: portalChannel,
+                  });
+                  setPortalMessage(`✅ Portal created! Profile ID: ${profile.profile.id}`);
+                  
+                  // Send notification
+                  try {
+                    const notification = await localAI.sendCustomerNotification(profile.profile.id, portalChannel);
+                    setPortalLink(notification.magicLink);
+                    setPortalMessage(prev => `${prev}\n📧 Notification sent via ${notification.channel}${notification.simulated ? ' (simulated - check console)' : ''}`);
+                  } catch (notifyErr: any) {
+                    setPortalMessage(prev => `${prev}\n⚠️ Notification failed: ${notifyErr.message}`);
+                  }
+                } catch (e: any) {
+                  setError(e?.message || 'Failed to create portal');
+                } finally {
+                  setPortalCreating(false);
+                }
+              }}
+              disabled={portalCreating}
+              style={{ opacity: portalCreating ? 0.7 : 1 }}
+            >
+              {portalCreating ? 'Creating Portal...' : 'Create Portal & Send Notification'}
+            </button>
+          </div>
+          {portalMessage && (
+            <div style={{ padding: 12, background: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+              {portalMessage}
+            </div>
+          )}
+          {portalLink && (
+            <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #10b981', borderRadius: 4 }}>
+              <strong>Portal Link:</strong>
+              <br />
+              <a href={portalLink} target="_blank" rel="noopener noreferrer" style={{ wordBreak: 'break-all', color: '#0ea5e9' }}>
+                {portalLink}
+              </a>
+            </div>
+          )}
+        </div>
       </section>
       <section>
         <h2>Audit Engine</h2>

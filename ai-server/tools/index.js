@@ -240,6 +240,93 @@ class ToolRegistry {
           });
           return result;
         }
+      },
+
+      google_places_intel: {
+        name: 'google_places_intel',
+        description: 'Get live Google Business Profile data and competitive intelligence for a local business',
+        parameters: {
+          type: 'object',
+          properties: {
+            businessName: {
+              type: 'string',
+              description: 'Name of the business to research'
+            },
+            location: {
+              type: 'string', 
+              description: 'City, state or full address of the business'
+            },
+            includeCompetitors: {
+              type: 'boolean',
+              description: 'Include competitor analysis (default true)',
+              default: true
+            }
+          },
+          required: ['businessName', 'location']
+        },
+        handler: async (args) => {
+          const { GooglePlacesService } = require('../services/google-places');
+          const placesService = new GooglePlacesService();
+          
+          if (!placesService.isConfigured) {
+            return {
+              error: 'Google Places API not configured',
+              message: 'Set GOOGLE_PLACES_API_KEY environment variable to enable live business data'
+            };
+          }
+          
+          try {
+            // Get business data
+            const businessData = await placesService.findBusiness(args.businessName, args.location);
+            
+            if (!businessData) {
+              return {
+                found: false,
+                message: `No Google Business Profile found for "${args.businessName}" in "${args.location}"`
+              };
+            }
+            
+            const result = {
+              found: true,
+              business: {
+                name: businessData.name,
+                rating: businessData.rating || 0,
+                reviewCount: businessData.user_ratings_total || 0,
+                address: businessData.formatted_address,
+                phone: businessData.formatted_phone_number,
+                website: businessData.website,
+                isOpen: businessData.opening_hours?.open_now,
+                status: businessData.business_status,
+                photos: businessData.photos?.length || 0,
+                categories: businessData.types || []
+              }
+            };
+            
+            // Add competitive intelligence if requested
+            if (args.includeCompetitors !== false) {
+              const competitors = await placesService.findCompetitors(businessData);
+              const marketAnalysis = placesService.analyzeMarketPosition(businessData, competitors);
+              
+              result.competitors = competitors.map(c => ({
+                name: c.name,
+                rating: c.rating,
+                reviewCount: c.userRatingsTotal,
+                vicinity: c.vicinity
+              }));
+              
+              result.marketPosition = marketAnalysis.marketPosition;
+              result.benchmarks = marketAnalysis.benchmarks;
+              result.insights = marketAnalysis.insights;
+            }
+            
+            return result;
+          } catch (error) {
+            return {
+              error: 'Failed to fetch Google Places data',
+              message: error.message
+            };
+          }
+        }
       }
     };
   }
