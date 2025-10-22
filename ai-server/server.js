@@ -9,8 +9,22 @@ const app = express();
 // Simple async handler to catch rejected promises in Express 4
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 app.use(express.json());
-// Allow cross-origin requests in case frontend is on a different origin (dev/proxy or separate host)
-app.use(cors());
+// CORS: In production, restrict to ALLOWED_ORIGINS (comma-separated). In dev, allow all.
+const rawAllowed = (process.env.ALLOWED_ORIGINS || '').trim();
+const allowedOrigins = rawAllowed ? rawAllowed.split(',').map(s => s.trim()).filter(Boolean) : [];
+if (allowedOrigins.length > 0) {
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // non-browser or same-origin
+      const ok = allowedOrigins.some(o => o === origin);
+      return ok ? cb(null, true) : cb(new Error('CORS: Origin not allowed'));
+    },
+    credentials: true
+  }));
+} else {
+  // fallback (dev)
+  app.use(cors());
+}
 
 // Initialize Firebase Admin SDK (Cloud Run will provide ADC by default)
 try {
