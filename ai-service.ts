@@ -155,7 +155,24 @@ class LocalAIService {
         'X-Request-ID': crypto.randomUUID()
       };
 
-      if (auth?.currentUser) {
+      const authProvider = ((import.meta as any)?.env?.VITE_AUTH_PROVIDER || 'firebase').toString();
+      if (authProvider === 'local') {
+        try {
+          let localToken: string | null = null;
+          if (typeof localStorage !== 'undefined') {
+            localToken = localStorage.getItem('LOCAL_ADMIN_TOKEN');
+          }
+          // Optional env-based token for dev convenience (exposed only in local dev)
+          if (!localToken && (import.meta as any)?.env?.VITE_LOCAL_ADMIN_TOKEN) {
+            localToken = (import.meta as any).env.VITE_LOCAL_ADMIN_TOKEN as string;
+          }
+          if (localToken) {
+            headers['X-Admin-Token'] = localToken;
+          }
+        } catch (e) {
+          // no-op
+        }
+      } else if (auth?.currentUser) {
         try {
           const token = await auth.currentUser.getIdToken();
           headers.Authorization = `Bearer ${token}`;
