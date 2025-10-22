@@ -93,6 +93,14 @@ npm run build
 firebase deploy --only hosting
 ```
 
+### Self-host at home (no Google Cloud)
+
+You can run the backend on your own machine and point the UI at it. See HOME-SERVER.md for a step-by-step guide. Quick gist:
+- Start backend: set `AUTH_MODE=local` in `ai-server/.env`, then `npm --prefix ai-server start`
+- Expose it: either port-forward 8080 or use Cloudflare Tunnel/Tailscale
+- Point UI: set `VITE_LOCAL_AI_URL` to your public URL (and `VITE_AUTH_PROVIDER=local` during dev)
+Read more in [HOME-SERVER.md](HOME-SERVER.md).
+
 ### Enable GitHub Pages (one-time)
 
 If the deployment action fails with a 404, make sure GitHub Pages is enabled for this repository:
